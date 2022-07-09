@@ -25,6 +25,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <Arduino.h>
 #include <SPI.h>
+constexpr auto I9 = A0;
+constexpr auto CS = A1;
+constexpr auto RESET_IOEXP = A2;
+constexpr auto IOEXP_INT = 2;
+constexpr auto I1_CLK = 3;
 
 /**
  * @brief The set of registers exposed by the MCP23S17 in the default bank mode
@@ -177,12 +182,22 @@ template<IOExpanderAddress addr>
 inline void writeDirection(int enable, uint16_t value) noexcept {
     write16<addr, MCP23x17Registers::IODIR>(enable, value);
 }
+void setInputs(uint16_t values) noexcept {
+    union {
+        uint16_t raw;
+        struct {
+            uint16_t i1 : 1;
+            uint16_t theByte : 8;
+            uint16_t i9 : 1;
+            uint16_t rest : 6;
+        };
+    } thingy;
+    thingy.raw = values;
+    digitalWrite(I1_CLK, thingy.i1 ? HIGH : LOW);
+    digitalWrite(I9, thingy.i1 ? HIGH : LOW);
+    write8<IOExpanderAddress::GAL_16V8_Element, MCP23x17Registers::GPIOB>(CS, thingy.theByte);
+}
 
-constexpr auto I9 = A0;
-constexpr auto CS = A1;
-constexpr auto RESET_IOEXP = A2;
-constexpr auto IOEXP_INT = 2;
-constexpr auto I1_CLK = 3;
 void 
 setAllPinsDirections(uint16_t value) noexcept {
     writeDirection<IOExpanderAddress::GAL_16V8_Element>(CS, value);
