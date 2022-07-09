@@ -187,7 +187,7 @@ class GALInterface {
         void configureIOPins(uint8_t pattern) noexcept;
         uint8_t getIOPinConfiguration() const noexcept { return ioPinConfiguration_; }
         uint8_t readOutputs() const noexcept;
-        void setInputs(uint16_t pattern) noexcept;
+        void setInputs(uint32_t pattern) noexcept;
         void setClockFrequency(int frequency) noexcept;
         void treatClockPinAsDigitalInput() noexcept { setClockFrequency(0); }
         bool clockPinIsDigitalInput() const noexcept { return clockFrequency_ == 0; }
@@ -377,7 +377,7 @@ setup() {
             Serial.println(F("CARD NOT INSTALLED!"));
         }
     }
-    setAllPinsDirections(0b00000000'00111111);
+    iface.configureIOPins(0b00'111111);
 }
 
 
@@ -385,9 +385,6 @@ String inputString = "";         // a String to hold incoming data
 bool stringComplete = false;  // whether the string is complete
 bool gotResult = false;
 String result = "";
-void 
-printOutPinMapping() noexcept {
-}
 
 void
 read() {
