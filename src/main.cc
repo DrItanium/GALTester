@@ -172,6 +172,7 @@ class GALInterface {
                 uint32_t oeState : 1;
                 uint32_t ioPins : 8;
             } bits;
+            uint32_t getMaskedState() const noexcept { return full & 0b11111111'1'11111111'1; }
         };
     private:
         void updateInputs() noexcept;
@@ -194,6 +195,7 @@ class GALInterface {
         void printPinStates() const noexcept;
         bool isOutputPin(int pin) const noexcept;
         bool isInputPin(int pin) const noexcept;
+        void displayRegisters() const noexcept;
     private:
         uint8_t cs_;
         uint8_t oe_;
@@ -221,30 +223,32 @@ GALInterface::GALInterface(byte chipSelect, byte oe, byte clk, byte reset, byte 
 }
 bool
 GALInterface::isOutputPin(int pin) const noexcept {
+    uint8_t inverse = ~ioPinConfiguration_;
     switch (pin) {
-        case 10: return ((~ioPinConfiguration_) & (1 << 0)) == 0;
-        case 11: return ((~ioPinConfiguration_) & (1 << 1)) == 0;
-        case 12: return ((~ioPinConfiguration_) & (1 << 2)) == 0;
-        case 13: return ((~ioPinConfiguration_) & (1 << 3)) == 0;
-        case 14: return ((~ioPinConfiguration_) & (1 << 4)) == 0;
-        case 15: return ((~ioPinConfiguration_) & (1 << 5)) == 0;
-        case 16: return ((~ioPinConfiguration_) & (1 << 6)) == 0;
-        case 17: return ((~ioPinConfiguration_) & (1 << 7)) == 0;
+        case 10: return ((inverse) & (1 << 0)) == 1;
+        case 11: return ((inverse) & (1 << 1)) == 1;
+        case 12: return ((inverse) & (1 << 2)) == 1;
+        case 13: return ((inverse) & (1 << 3)) == 1;
+        case 14: return ((inverse) & (1 << 4)) == 1;
+        case 15: return ((inverse) & (1 << 5)) == 1;
+        case 16: return ((inverse) & (1 << 6)) == 1;
+        case 17: return ((inverse) & (1 << 7)) == 1;
         default: return false;
     }
 }
 
 bool
 GALInterface::isInputPin(int pin) const noexcept {
+    uint8_t inverse = ~ioPinConfiguration_;
     switch (pin) {
-        case 10: return ((~ioPinConfiguration_) & (1 << 0)) == 1;
-        case 11: return ((~ioPinConfiguration_) & (1 << 1)) == 1;
-        case 12: return ((~ioPinConfiguration_) & (1 << 2)) == 1;
-        case 13: return ((~ioPinConfiguration_) & (1 << 3)) == 1;
-        case 14: return ((~ioPinConfiguration_) & (1 << 4)) == 1;
-        case 15: return ((~ioPinConfiguration_) & (1 << 5)) == 1;
-        case 16: return ((~ioPinConfiguration_) & (1 << 6)) == 1;
-        case 17: return ((~ioPinConfiguration_) & (1 << 7)) == 1;
+        case 10: return ((inverse) & (1 << 0)) == 0;
+        case 11: return ((inverse) & (1 << 1)) == 0;
+        case 12: return ((inverse) & (1 << 2)) == 0;
+        case 13: return ((inverse) & (1 << 3)) == 0;
+        case 14: return ((inverse) & (1 << 4)) == 0;
+        case 15: return ((inverse) & (1 << 5)) == 0;
+        case 16: return ((inverse) & (1 << 6)) == 0;
+        case 17: return ((inverse) & (1 << 7)) == 0;
         default: return true;
     }
 }
@@ -429,7 +433,8 @@ GALInterface::printPinStates() const noexcept {
     } else {
         Serial.println(F("LOW)"));
     }
-    for (int i = 10; i < 18; ++i) {
+    auto sample = readOutputs();
+    for (int i = 10, j = 0; i < 18; ++i, ++j) {
         Serial.print(F("P"));
         Serial.print((i + 2));
         if (isInputPin(i)) {
@@ -439,14 +444,14 @@ GALInterface::printPinStates() const noexcept {
                 Serial.println(F(": I (HIGH)"));
             }
         } else {
-            Serial.println(F(": O"));
+            auto bit = sample & (1 << j);
+            Serial.print(F(": O ("));
+            Serial.print(bit ? F("HIGH") : F("LOW"));
+            Serial.println(F(")"));
         }
     }
 
     Serial.println(F("P20: VCC"));
-    Serial.print(F("IO CONFIGURATION REGISTER CONTENTS: 0b"));
-    Serial.println(ioPinConfiguration_, BIN);
-
 }
 GALInterface iface(CS, 
         I9, 
@@ -459,22 +464,29 @@ setup() {
     Serial.begin(115200);
     SPI.begin();
     iface.begin();
-    iface.configureIOPins(0b00'111111);
+    iface.configureIOPins(0);
     Serial.println(F("GAL Testing Interface"));
     Serial.println(F("(C) 2022 Joshua Scoggins"));
     Serial.println(F("This is open source software! See LICENSE for details"));
     Serial.println();
+}
+void read() noexcept;
+void eval() noexcept;
+void loop() {
+    read();
+    eval();
 }
 
 
 String inputString = "";         // a String to hold incoming data
 bool stringComplete = false;  // whether the string is complete
 unsigned int position = 0;
+String getNextWordFromInput() noexcept {
 class Word {
     public:
         explicit Word(const String& name) : name_(name) { }
         virtual ~Word() = default;
-        [[nodiscard]] bool matches(const String& name) const noexcept { return name == name_; }
+        [[nodiscard]] virtual bool matches(const String& name) const noexcept { return name == name_; }
         virtual void invoke() noexcept = 0;
         const String& getName() const noexcept { return name_; }
     private:
@@ -513,10 +525,20 @@ void
 displayPinout() noexcept {
     iface.printPinStates();
 }
-Word* lookupTable[256] = { 
-    new LambdaWord("words", listWords),
-    new LambdaWord("pinout", displayPinout),
-};
+void 
+GALInterface::displayRegisters() const noexcept {
+    Serial.println(F("GAL Interface Registers"));
+    Serial.print(F("IO Pins Configuration: 0b"));
+    Serial.println(static_cast<byte>(~ioPinConfiguration_), BIN);
+    Serial.print(F("Input values: 0b"));
+    Serial.println(inputPinState_.getMaskedState(), BIN);
+}
+void 
+displayRegisters() noexcept {
+    iface.displayRegisters();
+}
+
+
 Word* findWord(const String& word) noexcept {
     for (auto* theWord: lookupTable) {
         if (theWord && theWord->matches(word)) {
@@ -584,11 +606,6 @@ eval() noexcept {
     } 
 }
 
-void
-loop() {
-    read();
-    eval();
-}
 
 #ifdef ARDUINO_AVR_UNO
 #if __cplusplus >= 201402L
@@ -601,3 +618,22 @@ void operator delete[](void* ptr, size_t) {
 }
 #endif 
 #endif
+
+void 
+setClkFrequency() noexcept {
+}
+class InvokeOnPrefixMatchWord : public Word {
+    public:
+        InvokeOnPrefixMatchWord(const String& name, const String& prefix) : Word(name), prefix_(prefix)  { }
+        ~InvokeOnPrefixMatchWord() override = default;
+        bool matches(const String& message) const noexcept override { return message.startsWith(prefix_); }
+    private:
+        String prefix_;
+};
+
+Word* lookupTable[256] = { 
+    new LambdaWord("words", listWords),
+    new LambdaWord("pins", displayPinout),
+    new LambdaWord("status", displayRegisters),
+    new LambdaWord("set-clock-frequency", setClkFrequency),
+};
