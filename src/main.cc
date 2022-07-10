@@ -367,6 +367,23 @@ GALInterface::begin() noexcept {
     setInputs(0);
     // setup the MCP23S17 as needed
 }
+void 
+GALInterface::printPinStates() const noexcept {
+    Serial.println(F("Pin states as seen from the perspective of the gal"));
+    Serial.print(F("P1: "));
+    if (clockPinIsDigitalInput()) {
+        Serial.print(F("I ("));
+        if (getInputState(0)) {
+            Serial.print(F("HIGH"));
+        } else {
+            Serial.print(F("LOW"));
+        }
+    } else {
+        Serial.print(F("CLK ("));
+        Serial.print(getClockFrequency());
+    }
+    Serial.println(F(")"));
+}
 GALInterface iface(CS, 
         I9, 
         I1_CLK, 
@@ -395,6 +412,61 @@ bool stringComplete = false;  // whether the string is complete
 bool gotResult = false;
 String result = "";
 unsigned int position = 0;
+class Word {
+    public:
+        explicit Word(const String& name) : name_(name) { }
+        virtual ~Word() = default;
+        [[nodiscard]] bool matches(const String& name) const noexcept { return name == name_; }
+        virtual void invoke() noexcept = 0;
+        const String& getName() const noexcept { return name_; }
+    private:
+        String name_;
+};
+class LambdaWord : public Word {
+    public:
+        using Parent = Word;
+        using Function = void (*)();
+        explicit LambdaWord(const String& name, Function theFunction) : Parent(name), func_(theFunction)  { }
+        ~LambdaWord() override = default;
+        void invoke() noexcept override {
+            func_();
+        }
+    private:
+        Function func_;
+};
+extern Word* lookupTable[256];
+void listWords() noexcept {
+    Serial.println(F("Registered Words:"));
+    int count = 0;
+    for (auto* word : lookupTable) {
+        if (word) {
+            Serial.print(F("- "));
+            Serial.println(word->getName());
+            ++count;
+        }
+    }
+    Serial.println();
+    Serial.print(F("Found "));
+    Serial.print(count);
+    Serial.println(F(" words in dictionary"));
+    Serial.println();
+}
+void
+displayPinout() noexcept {
+    iface.printPinStates();
+}
+Word* lookupTable[] = { 
+    new LambdaWord("words", listWords),
+    new LambdaWord("pinout", displayPinout),
+};
+Word* findWord(const String& word) noexcept {
+    for (auto* theWord: lookupTable) {
+        if (theWord && theWord->matches(word)) {
+            return theWord;
+        }
+    }
+    return nullptr;
+}
 void
 read() {
     while (Serial.available()) {
@@ -410,9 +482,13 @@ eval(const String& word) noexcept {
     if (word.length() == 0) {
         return;
     } else {
-        Serial.print(F("GOT WORD: \""));
-        Serial.print(word);
-        Serial.println(F("\""));
+        if (auto target = findWord(word); target) {
+            target->invoke();
+        } else {
+            Serial.print(F("UNKNOWN WORD: \""));
+            Serial.print(word);
+            Serial.println(F("\""));
+        }
     }
 }
 void
@@ -465,3 +541,15 @@ loop() {
     read();
     eval();
 }
+
+#ifdef ARDUINO_AVR_UNO
+#if __cplusplus >= 201402L
+void operator delete(void* ptr, size_t) {
+    ::operator delete(ptr);
+}
+
+void operator delete[](void* ptr, size_t) {
+    ::operator delete(ptr);
+}
+#endif 
+#endif
