@@ -192,6 +192,8 @@ class GALInterface {
         void setInput(int pin, bool state) noexcept;
         bool getInputState(int pin) const noexcept;
         void printPinStates() const noexcept;
+        bool isOutputPin(int pin) const noexcept;
+        bool isInputPin(int pin) const noexcept;
     private:
         uint8_t cs_;
         uint8_t oe_;
@@ -217,6 +219,36 @@ GALInterface::GALInterface(byte chipSelect, byte oe, byte clk, byte reset, byte 
 {
 
 }
+bool
+GALInterface::isOutputPin(int pin) const noexcept {
+    switch (pin) {
+        case 10: return ((~ioPinConfiguration_) & (1 << 0)) == 0;
+        case 11: return ((~ioPinConfiguration_) & (1 << 1)) == 0;
+        case 12: return ((~ioPinConfiguration_) & (1 << 2)) == 0;
+        case 13: return ((~ioPinConfiguration_) & (1 << 3)) == 0;
+        case 14: return ((~ioPinConfiguration_) & (1 << 4)) == 0;
+        case 15: return ((~ioPinConfiguration_) & (1 << 5)) == 0;
+        case 16: return ((~ioPinConfiguration_) & (1 << 6)) == 0;
+        case 17: return ((~ioPinConfiguration_) & (1 << 7)) == 0;
+        default: return false;
+    }
+}
+
+bool
+GALInterface::isInputPin(int pin) const noexcept {
+    switch (pin) {
+        case 10: return ((~ioPinConfiguration_) & (1 << 0)) == 1;
+        case 11: return ((~ioPinConfiguration_) & (1 << 1)) == 1;
+        case 12: return ((~ioPinConfiguration_) & (1 << 2)) == 1;
+        case 13: return ((~ioPinConfiguration_) & (1 << 3)) == 1;
+        case 14: return ((~ioPinConfiguration_) & (1 << 4)) == 1;
+        case 15: return ((~ioPinConfiguration_) & (1 << 5)) == 1;
+        case 16: return ((~ioPinConfiguration_) & (1 << 6)) == 1;
+        case 17: return ((~ioPinConfiguration_) & (1 << 7)) == 1;
+        default: return true;
+    }
+}
+
 uint8_t
 GALInterface::readOutputs() const noexcept {
     return read8(MCP23x17Registers::GPIOA);
@@ -272,6 +304,7 @@ GALInterface::setInput(int pin, bool state) noexcept {
         case 9:
             inputPinState_.bits.oeState = state;
             break;
+        case 10:
         case 11:
         case 12:
         case 13:
@@ -279,7 +312,6 @@ GALInterface::setInput(int pin, bool state) noexcept {
         case 15:
         case 16:
         case 17:
-        case 18:
             setOutputPinValue(state);
             break;
         default:
@@ -302,7 +334,6 @@ GALInterface::setInputs(uint32_t pattern) noexcept {
     inputPinState_.full = pattern;
     updateInputs();
 }
-
 bool
 GALInterface::getInputState(int pin) const noexcept {
     switch (pin) {
@@ -326,21 +357,21 @@ GALInterface::getInputState(int pin) const noexcept {
             return inputPinState_.bits.inputs & 0b1000'0000;
         case 9:
             return inputPinState_.bits.oeState;
-        case 11:
+        case 10:
             return inputPinState_.bits.ioPins & 0b0000'0001;
-        case 12:
+        case 11:
             return inputPinState_.bits.ioPins & 0b0000'0010;
-        case 13:
+        case 12:
             return inputPinState_.bits.ioPins & 0b0000'0100;
-        case 14:
+        case 13:
             return inputPinState_.bits.ioPins & 0b0000'1000;
-        case 15:
+        case 14:
             return inputPinState_.bits.ioPins & 0b0001'0000;
-        case 16:
+        case 15:
             return inputPinState_.bits.ioPins & 0b0010'0000;
-        case 17:
+        case 16:
             return inputPinState_.bits.ioPins & 0b0100'0000;
-        case 18:
+        case 17:
             return inputPinState_.bits.ioPins & 0b1000'0000;
         default:
             return false;
@@ -361,7 +392,8 @@ GALInterface::begin() noexcept {
     pinMode(IOEXP_INT, INPUT_PULLUP);
     write16(MCP23x17Registers::IODIR, 0x00FF); // PORTA is set to inputs, PORTB are outputs
     write16(MCP23x17Registers::OLAT, 0xFFFF);
-    setInputs(0);
+    setInputs(0); // set all inputs to low
+    configureIOPins(0); // all will be _outputs_
     // setup the MCP23S17 as needed
 }
 void 
@@ -385,21 +417,31 @@ GALInterface::printPinStates() const noexcept {
         Serial.print(i + 1);
         Serial.print(F(": I ("));
         if (getInputState(i)) {
-            Serial.print(F("HIGH"));
+            Serial.println(F("HIGH)"));
         } else {
-            Serial.print(F("LOW"));
+            Serial.println(F("LOW)"));
         }
-        Serial.println(F(")"));
     }
     Serial.println(F("P10: GND"));
     Serial.print(F("P11: I/~{OE} ("));
     if (getInputState(9)) {
-        Serial.print(F("HIGH"));
+        Serial.println(F("HIGH)"));
     } else {
-        Serial.print(F("LOW"));
+        Serial.println(F("LOW)"));
     }
-    Serial.println(F(")"));
-
+    for (int i = 10; i < 19; ++i) {
+        Serial.print(F("P"));
+        Serial.print((i + 2));
+        if (isInputPin(i)) {
+            if (getInputState(i)) {
+                Serial.println(F(": I (LOW)"));
+            } else {
+                Serial.println(F(": I (HIGH)"));
+            }
+        } else {
+            Serial.println(F(": O"));
+        }
+    }
 
     Serial.println(F("P20: VCC"));
 
