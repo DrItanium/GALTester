@@ -444,6 +444,8 @@ GALInterface::printPinStates() const noexcept {
     }
 
     Serial.println(F("P20: VCC"));
+    Serial.print(F("IO CONFIGURATION REGISTER CONTENTS: 0b"));
+    Serial.println(ioPinConfiguration_, BIN);
 
 }
 GALInterface iface(CS, 
