@@ -410,7 +410,9 @@ eval(const String& word) noexcept {
     if (word.length() == 0) {
         return;
     } else {
-        
+        Serial.print(F("GOT WORD: \""));
+        Serial.print(word);
+        Serial.println(F("\""));
     }
 }
 void
@@ -462,5 +464,4 @@ void
 loop() {
     read();
     eval();
-    print();
 }
