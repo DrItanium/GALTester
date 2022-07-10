@@ -25,14 +25,11 @@
 
 #include <Arduino.h>
 #include <SPI.h>
-#include <SD.h>
 constexpr auto CS = 10;
 constexpr auto RESET_IOEXP = 9;
 constexpr auto IOEXP_INT = 8;
 constexpr auto I9 = 7;
 constexpr auto I1_CLK = 6;
-constexpr auto CardDetect = 5;
-constexpr auto SDSelect = 4;
 enum class IOExpanderAddress : byte {
     GAL_16V8_Element = 0b0000,
     OtherDevice0 = 0b0010,
@@ -395,22 +392,12 @@ setup() {
     Serial.begin(115200);
     SPI.begin();
     iface.begin();
-    pinMode(CardDetect, INPUT);
-    if (!SD.begin(SDSelect)) {
-        if (digitalRead(CardDetect) == HIGH) {
-            Serial.println(F("CARD INSTALLED BUT ERROR!"));
-        } else {
-            Serial.println(F("CARD NOT INSTALLED!"));
-        }
-    }
     iface.configureIOPins(0b00'111111);
 }
 
 
 String inputString = "";         // a String to hold incoming data
 bool stringComplete = false;  // whether the string is complete
-bool gotResult = false;
-String result = "";
 unsigned int position = 0;
 class Word {
     public:
@@ -520,20 +507,10 @@ eval() noexcept {
             eval(subWord);
             subWord = "";
         } 
-        result = "ok";
-        gotResult = true;
+        Serial.println(F("\tok"));
         // carry out the last word if we ended with a newline
         inputString = "";
-    } else {
-        gotResult = false;
-    }
-}
-void
-print() {
-    if (gotResult) {
-        Serial.println(result);
-        result = "";
-    }
+    } 
 }
 
 void
