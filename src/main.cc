@@ -708,9 +708,7 @@ handleError(bool errorState, bool stillEvaluating) noexcept {
             Serial.println(F("some error happened")); 
             break;
     }
-    if (!stillEvaluating || errorState) {
-        clearState();
-    }
+    clearState();
     if (errorState) {
         clearStack();
         return false;
