@@ -1192,7 +1192,7 @@ setIOPinMode(const String&) noexcept {
     popItemOffStack(mode);
     // assume that targetPin is actually subtracted by one
     popItemOffStack(targetPin);
-    iface.configureIOPin(targetPin - 1, mode);
+    iface.configureIOPin(targetPin, mode);
     return true;
 }
 
