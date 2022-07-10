@@ -429,7 +429,7 @@ GALInterface::printPinStates() const noexcept {
     } else {
         Serial.println(F("LOW)"));
     }
-    for (int i = 10; i < 19; ++i) {
+    for (int i = 10; i < 18; ++i) {
         Serial.print(F("P"));
         Serial.print((i + 2));
         if (isInputPin(i)) {
@@ -458,6 +458,10 @@ setup() {
     SPI.begin();
     iface.begin();
     iface.configureIOPins(0b00'111111);
+    Serial.println(F("GAL Testing Interface"));
+    Serial.println(F("(C) 2022 Joshua Scoggins"));
+    Serial.println(F("This is open source software! See LICENSE for details"));
+    Serial.println();
 }
 
 
