@@ -578,7 +578,13 @@ eval(const String& word) noexcept {
     }
 }
 bool pushItemOntoStack(int32_t value) noexcept;
+template<int32_t constant>
+bool pushItemOntoStack(const String&) noexcept { 
+    return pushItemOntoStack(constant);
+}
 bool popItemOffStack(int32_t& item) noexcept;
+bool dropTopOfStack() noexcept;
+bool dropTopOfStack(const String&) noexcept { return dropTopOfStack(); }
 bool stackEmpty() noexcept;
 bool stackFull() noexcept;
 void clearStack() noexcept;
@@ -749,8 +755,11 @@ setupLookupTable() noexcept {
     defineWord(F("pins"), displayPinout);
     defineWord(F("status"), displayRegisters);
     defineWord(F("set-clock-frequency"), setClkFrequency);
-    defineWord(F("high"), [](const String&) { return pushItemOntoStack(1); });
-    defineWord(F("low"), [](const String&) { return pushItemOntoStack(0); });
+    defineWord(F("high"), pushItemOntoStack<1>);
+    defineWord(F("true"), pushItemOntoStack<0xFFFF'FFFF>);
+    defineWord(F("false"), pushItemOntoStack<0>);
+    defineWord(F("low"), pushItemOntoStack<0>);
+    defineWord(F("drop"), dropTopOfStack);
     defineSpecialWord<NumericBaseCapture>(F("binary-convert (prefix is 0b)"), F("0b"), 2);
 }
 Word* lookupTable[256] = { 0 };
