@@ -25,11 +25,21 @@
 
 #include <Arduino.h>
 #include <SPI.h>
+#ifdef ARDUINO_AVR_UNO
 constexpr auto CS = 10;
 constexpr auto RESET_IOEXP = 9;
 constexpr auto IOEXP_INT = 8;
 constexpr auto I9 = 7;
 constexpr auto I1_CLK = 6;
+#elif defined(ARDUINO_NRF52_ADAFRUIT) && defined(NRF52832_XXAA)
+constexpr auto CS = 27;
+constexpr auto RESET_IOEXP = 30;
+constexpr auto IOEXP_INT = 11;
+constexpr auto I9 = 7;
+constexpr auto I1_CLK = 15;
+#else 
+#error "unknown board target!"
+#endif
 enum class IOExpanderAddress : byte {
     GAL_16V8_Element = 0b0000,
     OtherDevice0 = 0b0010,
@@ -821,7 +831,7 @@ pushItemOntoStack(int32_t value) noexcept {
         errorMessage = F("stack full");
         return false;
     } else {
-        theStack[++stackPosition] = value;
+        theStack[--stackPosition] = value;
         return true;
     }
 }
