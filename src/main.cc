@@ -197,6 +197,7 @@ class GALInterface {
          * configuring the MCP23S17.
          */
         void configureIOPins(uint8_t pattern) noexcept;
+        void configureIOPin(int32_t pin, int mode) noexcept;
         uint8_t getIOPinConfiguration() const noexcept { return ioPinConfiguration_; }
         uint8_t readOutputs() const noexcept;
         void setInputs(uint32_t pattern) noexcept;
@@ -210,6 +211,7 @@ class GALInterface {
         bool isOutputPin(int pin) const noexcept;
         bool isInputPin(int pin) const noexcept;
         void displayRegisters() const noexcept;
+        bool isIOPin(int pin) const noexcept;
     private:
         uint8_t cs_;
         uint8_t oe_;
@@ -220,6 +222,7 @@ class GALInterface {
         uint8_t readOpcode_;
         uint8_t writeOpcode_;
         uint8_t ioPinConfiguration_ = 0; 
+        //uint8_t ioPinPullup_ = 0;
         InputState inputPinState_;
         int clockFrequency_ = 0; 
 };
@@ -234,6 +237,33 @@ GALInterface::GALInterface(byte chipSelect, byte oe, byte clk, byte reset, byte 
     writeOpcode_(GALInterface::generateWriteOpcode(address)) 
 {
 
+}
+void 
+GALInterface::configureIOPin(int32_t pin, int mode) noexcept {
+    if (isIOPin(pin)) {
+        switch (auto temporary = ioPinConfiguration_; mode) {
+            case INPUT:
+                /// @todo disable pullups
+                temporary |= (1 << (pin - 10));
+                configureIOPins(temporary);
+                break;
+            case OUTPUT:
+                temporary &= ~(1 << (pin - 10));
+                configureIOPins(temporary);
+                break;
+            case INPUT_PULLUP:
+                /// @todo configure pullups
+                temporary |= (1 << (pin - 10));
+                configureIOPins(temporary);
+                break;
+            default:
+                break;
+        }
+    }
+}
+bool
+GALInterface::isIOPin(int pin) const noexcept {
+    return pin >= 10 && pin <= 17;
 }
 bool
 GALInterface::isOutputPin(int pin) const noexcept {
@@ -823,16 +853,13 @@ bool topLessThanLower(const String&) noexcept;
 bool topGreaterThanOrEqualLower(const String&) noexcept;
 bool topLessThanOrEqualLower(const String&) noexcept;
 bool duplicateTop(const String&) noexcept;
+bool setIOPinMode(const String&) noexcept;
 void
 setupLookupTable() noexcept {
     defineWord(F("words"), listWords);
     defineWord(F("pins"), displayPinout);
     defineWord(F("status"), displayRegisters);
     defineWord(F("set-clock-frequency"), setClkFrequency);
-    defineWord(F("high"), pushItemOntoStack<1>);
-    defineWord(F("true"), pushItemOntoStack<0xFFFF'FFFF>);
-    defineWord(F("false"), pushItemOntoStack<0>);
-    defineWord(F("low"), pushItemOntoStack<0>);
     defineWord(F("drop"), dropTopOfStack);
     defineWord(F("."), popAndPrintStackTop);
     defineWord(F(".s"), printStackContents);
@@ -848,6 +875,34 @@ setupLookupTable() noexcept {
     defineWord(F("<"), topGreaterThanLower);
     defineWord(F("<="), topLessThanOrEqualLower);
     defineWord(F(">="), topGreaterThanOrEqualLower);
+    defineWord(F("io-pin-mode"), setIOPinMode);
+#define X(str, target) defineWord(F(str) , pushItemOntoStack<target>)
+    X("input", INPUT);
+    X("output", OUTPUT);
+    //X("input-pullup", INPUT_PULLUP);
+    X("low", LOW);
+    X("high", HIGH);
+    X("true", 0xFFFF'FFFF);
+    X("false", 0);
+    X("P1", 0);
+    X("P2", 1);
+    X("P3", 2);
+    X("P4", 3);
+    X("P5", 4);
+    X("P6", 5);
+    X("P7", 6);
+    X("P8", 7);
+    X("P9", 8);
+    X("P11", 9);
+    X("P12", 10);
+    X("P13", 11);
+    X("P14", 12);
+    X("P15", 13);
+    X("P16", 14);
+    X("P17", 15);
+    X("P18", 16);
+    X("P19", 17);
+#undef X
 
     defineSpecialWord<NumericBaseCapture>(F("binary-convert (prefix is 0b)"), F("0b"), 2);
 
@@ -1089,5 +1144,19 @@ duplicateTop(const String&) noexcept {
     } else {
         return false;
     }
+}
+
+bool
+setIOPinMode(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = "not enough items on stack";
+        return false;
+    }
+    int32_t mode, targetPin;
+    popItemOffStack(mode);
+    // assume that targetPin is actually subtracted by one
+    popItemOffStack(targetPin);
+    iface.configureIOPin(targetPin - 1, mode);
+    return true;
 }
 
