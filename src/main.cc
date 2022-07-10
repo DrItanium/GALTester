@@ -25,6 +25,7 @@
 
 #include <Arduino.h>
 #include <SPI.h>
+#include <SD.h>
 #include "BoardTarget.h"
 #ifdef TARGET_BOARD_ARDUINO_UNO 
 constexpr auto CS = 10;
@@ -32,6 +33,8 @@ constexpr auto RESET_IOEXP = 9;
 constexpr auto IOEXP_INT = 8;
 constexpr auto I9 = 7;
 constexpr auto I1_CLK = 6;
+constexpr auto CardDetect = 5;
+constexpr auto SDSelect = 4;
 #elif defined(TARGET_BOARD_NRF52832_BLUEFRUIT_FEATHER)
 constexpr auto CS = 27;
 constexpr auto RESET_IOEXP = 30;
@@ -471,16 +474,35 @@ GALInterface iface(CS,
         IOEXP_INT, 
         IOExpanderAddress::GAL_16V8_Element);
 void setupLookupTable() noexcept; 
+volatile bool sdEnabled = false;
 void 
 setup() {
     Serial.begin(115200);
+    Serial.println(F("GAL Testing Interface"));
+    Serial.println(F("(C) 2022 Joshua Scoggins"));
+    Serial.println(F("This is open source software! See LICENSE for details"));
     SPI.begin();
     setupLookupTable();
     iface.begin();
     iface.configureIOPins(0);
-    Serial.println(F("GAL Testing Interface"));
-    Serial.println(F("(C) 2022 Joshua Scoggins"));
-    Serial.println(F("This is open source software! See LICENSE for details"));
+#ifndef TARGET_BOARD_ARDUINO_UNO
+    pinMode(SDSelect, OUTPUT);
+    digitalWrite(SDSelect, HIGH);
+    pinMode(CardDetect, INPUT);
+    Serial.println(F("Checking for an SD Card..."));
+    if (!SD.begin(SDSelect)) {
+        if (digitalRead(CardDetect) == HIGH) {
+            Serial.println(F("SD CARD FOUND BUT ERROR OCCURRED DURING INIT!"));
+        } else {
+            Serial.println(F("SD CARD NOT INSERTED"));
+        }
+
+        Serial.println(F("SD CARD WILL NOT BE AVAILABLE!!!"));
+    } else {
+        sdEnabled = true;
+        Serial.println(F("SD CARD AVAILABLE!"));
+    }
+#endif
     Serial.println();
 }
 void read() noexcept;
@@ -569,6 +591,7 @@ read() {
     while (Serial.available()) {
         char inChar = static_cast<char>(Serial.read());
         inputString += inChar;
+        Serial.print(inChar);
         if (inChar == '\n') {
             stringComplete = true;
         } 
