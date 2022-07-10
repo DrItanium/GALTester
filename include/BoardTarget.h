@@ -31,10 +31,9 @@
 #if defined(NRF52832_XXAA)
 #define TARGET_BOARD_NRF52832_BLUEFRUIT_FEATHER
 #else
-#error "unknown NRF52 series board
+#error "unknown NRF52 series board"
 #endif
 #else 
 #error "unknown board!"
 #endif
-
 #endif

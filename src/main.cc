@@ -25,7 +25,7 @@
 
 #include <Arduino.h>
 #include <SPI.h>
-#include "TargetBoard.h"
+#include "BoardTarget.h"
 #ifdef TARGET_BOARD_ARDUINO_UNO 
 constexpr auto CS = 10;
 constexpr auto RESET_IOEXP = 9;
