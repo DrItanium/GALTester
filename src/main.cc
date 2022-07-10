@@ -459,10 +459,12 @@ GALInterface iface(CS,
         RESET_IOEXP, 
         IOEXP_INT, 
         IOExpanderAddress::GAL_16V8_Element);
+void setupLookupTable() noexcept; 
 void 
 setup() {
     Serial.begin(115200);
     SPI.begin();
+    setupLookupTable();
     iface.begin();
     iface.configureIOPins(0);
     Serial.println(F("GAL Testing Interface"));
@@ -483,7 +485,7 @@ class Word {
         explicit Word(const String& name) : name_(name) { }
         virtual ~Word() = default;
         [[nodiscard]] virtual bool matches(const String& name) const noexcept { return name == name_; }
-        virtual void invoke(const String& match) noexcept = 0;
+        virtual bool invoke(const String& match) noexcept = 0;
         const String& getName() const noexcept { return name_; }
     private:
         String name_;
@@ -491,17 +493,17 @@ class Word {
 class LambdaWord : public Word {
     public:
         using Parent = Word;
-        using Function = void (*)(const String&);
+        using Function = bool (*)(const String&);
         explicit LambdaWord(const String& name, Function theFunction) : Parent(name), func_(theFunction)  { }
         ~LambdaWord() override = default;
-        void invoke(const String& match) noexcept override {
-            func_(match);
+        bool invoke(const String& match) noexcept override {
+            return func_(match);
         }
     private:
         Function func_;
 };
 extern Word* lookupTable[256];
-void 
+bool
 listWords(const String&) noexcept {
     Serial.println(F("Registered Words:"));
     int count = 0;
@@ -517,10 +519,12 @@ listWords(const String&) noexcept {
     Serial.print(count);
     Serial.println(F(" words in dictionary"));
     Serial.println();
+    return true;
 }
-void
+bool
 displayPinout(const String&) noexcept {
     iface.printPinStates();
+    return true;
 }
 void 
 GALInterface::displayRegisters() const noexcept {
@@ -530,9 +534,10 @@ GALInterface::displayRegisters() const noexcept {
     Serial.print(F("Input values: 0b"));
     Serial.println(inputPinState_.getMaskedState(), BIN);
 }
-void 
+bool
 displayRegisters(const String&) noexcept {
     iface.displayRegisters();
+    return true;
 }
 
 
@@ -651,26 +656,28 @@ void operator delete[](void* ptr, size_t) {
 #endif 
 #endif
 
-void 
+bool
 setClkFrequency(const String&) noexcept {
+    errorMessage = F("unimplemented");
+    return false;
 }
 class InvokeOnPrefixMatchWord : public Word {
     public:
         InvokeOnPrefixMatchWord(const String& name, const String& prefix) : Word(name), prefix_(prefix) { }
         ~InvokeOnPrefixMatchWord() override = default;
         bool matches(const String& message) const noexcept override { return message.startsWith(prefix_); }
-        void invoke(const String& match) noexcept override;
+        bool invoke(const String& match) noexcept override;
     protected:
-        virtual void invoke0(const String& substringMatch) noexcept = 0;
+        virtual bool invoke0(const String& substringMatch) noexcept = 0;
     private:
         String prefix_;
 };
 
-void
+bool
 InvokeOnPrefixMatchWord::invoke(const String& match) noexcept {
     // if we got here then it is safe to strip the prefix off
     auto substring = match.substring(prefix_.length());
-    invoke0(substring);
+    return invoke0(substring);
 }
 class ParseNumberAndPushOntoStack : public InvokeOnPrefixMatchWord {
     public:
@@ -683,7 +690,7 @@ class ParseNumberAndPushOntoStack : public InvokeOnPrefixMatchWord {
 
 bool
 ParseNumberAndPushOntoStack::invoke0(const String& match) noexcept {
-    uint32_t value = 0;
+    int32_t value = 0;
     if (parse(match, value)) {
         return pushItemOntoStack(value);
     } else {
@@ -693,28 +700,58 @@ ParseNumberAndPushOntoStack::invoke0(const String& match) noexcept {
 
 class NumericBaseCapture : public ParseNumberAndPushOntoStack {
     public:
-        BinaryCaptureWord(const String& name, const String& prefix, byte numericBase) : InvokeOnPrefixMatchWord(name, prefix), base_(base) { }
+        NumericBaseCapture(const String& name, const String& prefix, int numericBase) : ParseNumberAndPushOntoStack(name, prefix), base_(numericBase) { }
     protected:
         bool parse(const String& theValue, int32_t& number) noexcept override;
     private:
-        byte base_;
+        int base_;
 
 };
 
 bool
 NumericBaseCapture::parse(const String& theValue, int32_t& result) noexcept {
-    errorMessage = "not implemented";
+    char* firstBad = nullptr;
+    auto number = strtol(theValue.c_str(), &firstBad, base_); 
+    if (firstBad != nullptr) {
+        // okay so we got a bad conversion
+        errorMessage = F("bad numeric conversion");
+        return false;
+    } else {
+        // okay so we were successful
+        result = number;
+        return true;
+    }
+}
+uint32_t lookupTableCount = 0;
+bool
+defineWord(Word* theWord) noexcept {
+    if (theWord && (lookupTableCount < 256)) {
+        lookupTable[lookupTableCount] = theWord;
+        ++lookupTableCount;
+        return true;
+    } 
     return false;
 }
-
-Word* lookupTable[256] = { 
-    new LambdaWord(F("words"), listWords),
-    new LambdaWord(F("pins"), displayPinout),
-    new LambdaWord(F("status"), displayRegisters),
-    new LambdaWord(F("set-clock-frequency"), setClkFrequency),
-    new LambdaWord(F("high"), [](const String&) { return pushItemOntoStack(1); }),
-    new LambdaWord(F("low"), [](const String&) { return pushItemOntoStack(0); }),
-};
+bool
+defineWord(const String& name, LambdaWord::Function func) noexcept {
+    return defineWord(new LambdaWord(name, func));
+}
+template<typename T, typename ... Args>
+bool
+defineSpecialWord(const String& name, Args&& ... args) noexcept {
+    return defineWord(new T(name, args...));
+}
+void
+setupLookupTable() noexcept {
+    defineWord(F("words"), listWords);
+    defineWord(F("pins"), displayPinout);
+    defineWord(F("status"), displayRegisters);
+    defineWord(F("set-clock-frequency"), setClkFrequency);
+    defineWord(F("high"), [](const String&) { return pushItemOntoStack(1); });
+    defineWord(F("low"), [](const String&) { return pushItemOntoStack(0); });
+    defineSpecialWord<NumericBaseCapture>(F("binary-convert (prefix is 0b)"), F("0b"), 2);
+}
+Word* lookupTable[256] = { 0 };
 
 String inputString = "";         // a String to hold incoming data
 bool stringComplete = false;  // whether the string is complete
