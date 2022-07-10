@@ -44,10 +44,10 @@ enum class IOExpanderAddress : byte {
     OtherDevice6 = 0b1110,
 };
 class GALInterface {
-        static constexpr byte generateReadOpcode(uint8_t addr) noexcept { return 0b0100'0001 | static_cast<uint8_t>(addr); }
-        static constexpr byte generateWriteOpcode(uint8_t addr) noexcept { return 0b0100'0000 | static_cast<uint8_t>(addr); }
+        static constexpr byte generateReadOpcode(IOExpanderAddress addr) noexcept { return 0b0100'0001 | static_cast<uint8_t>(addr); }
+        static constexpr byte generateWriteOpcode(IOExpanderAddress addr) noexcept { return 0b0100'0000 | static_cast<uint8_t>(addr); }
     public:
-        GALInterface(byte cs, byte oe, byte clk, byte reset, byte interrupt, byte address);
+        GALInterface(byte cs, byte oe, byte clk, byte reset, byte interrupt, IOExpanderAddress address);
         void begin() noexcept;
     private:
         /**
@@ -96,7 +96,7 @@ class GALInterface {
          * @param enable the enable pin
          * @return The 16-bit value pulled from the io expander
          */
-        uint16_t read16(MCP23x17Registers opcode) noexcept {
+        uint16_t read16(MCP23x17Registers opcode) const noexcept {
             SPI.beginTransaction(SPISettings(F_CPU, MSBFIRST, SPI_MODE0));
             digitalWrite(cs_, LOW);
             (void)SPI.transfer(readOpcode_);
@@ -113,7 +113,7 @@ class GALInterface {
          * @tparam opcode The register pair to read from
          * @return The contents of an 8-bit register on the io expander
          */
-        uint8_t read8(MCP23x17Registers opcode) noexcept {
+        uint8_t read8(MCP23x17Registers opcode) const noexcept {
             SPI.beginTransaction(SPISettings(F_CPU, MSBFIRST, SPI_MODE0));
             digitalWrite(cs_, LOW);
             (void)SPI.transfer(readOpcode_);
@@ -201,15 +201,14 @@ class GALInterface {
         uint8_t clk_;
         uint8_t reset_;
         uint8_t int_;
-        uint8_t addr_;
+        IOExpanderAddress addr_;
         uint8_t readOpcode_;
         uint8_t writeOpcode_;
         uint8_t ioPinConfiguration_ = 0; 
         InputState inputPinState_;
-        uint32_t inputPinStates_ = 0;
         int clockFrequency_ = 0; 
 };
-GALInterface::GALInterface(byte chipSelect, byte oe, byte clk, byte reset, byte intPin, byte address) : 
+GALInterface::GALInterface(byte chipSelect, byte oe, byte clk, byte reset, byte intPin, IOExpanderAddress address) : 
     cs_(chipSelect), 
     oe_(oe),
     clk_(clk),
@@ -220,6 +219,10 @@ GALInterface::GALInterface(byte chipSelect, byte oe, byte clk, byte reset, byte 
     writeOpcode_(GALInterface::generateWriteOpcode(address)) 
 {
 
+}
+uint8_t
+GALInterface::readOutputs() const noexcept {
+    return read8(MCP23x17Registers::GPIOA);
 }
 void
 GALInterface::configureIOPins(uint8_t pattern) noexcept {
@@ -357,13 +360,19 @@ GALInterface::begin() noexcept {
     digitalWrite(clk_, LOW);
     pinMode(reset_, OUTPUT);
     digitalWrite(reset_, LOW);
-    digitalWrite(reset_, LOW);
+    digitalWrite(reset_, HIGH);
     pinMode(IOEXP_INT, INPUT_PULLUP);
     write16(MCP23x17Registers::IODIR, 0x00FF); // PORTA is set to inputs, PORTB are outputs
+    write16(MCP23x17Registers::OLAT, 0xFFFF);
     setInputs(0);
     // setup the MCP23S17 as needed
 }
-GALInterface iface(CS, I9, I1_CLK, RESET_IOEXP, IOEXP_INT, 0);
+GALInterface iface(CS, 
+        I9, 
+        I1_CLK, 
+        RESET_IOEXP, 
+        IOEXP_INT, 
+        IOExpanderAddress::GAL_16V8_Element);
 void 
 setup() {
     Serial.begin(115200);
@@ -412,9 +421,20 @@ print() {
         Serial.println(result);
     }
 }
+volatile uint32_t index = 0;
 void
 loop() {
+#if 0
     read();
     eval();
     print();
+#else
+    iface.setInputs(index);
+    Serial.print(F("INPUTS: 0b"));
+    Serial.println(index, BIN);
+    Serial.print(F("OUTPUTS: 0b"));
+    Serial.println(iface.readOutputs(), BIN);
+    ++index;
+    delay(1000);
+#endif
 }
