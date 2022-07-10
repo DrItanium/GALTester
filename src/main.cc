@@ -786,6 +786,18 @@ defineSpecialWord(const String& name, Args&& ... args) noexcept {
 }
 bool popAndPrintStackTop(const String&) noexcept;
 bool printStackContents(const String&) noexcept;
+bool addTwoNumbers(const String&) noexcept;
+bool subtractTwoNumbers(const String&) noexcept;
+bool multiplyTwoNumbers(const String&) noexcept;
+bool divideTwoNumbers(const String&) noexcept;
+bool moduloTwoNumbers(const String&) noexcept;
+bool twoNumbersEqual(const String&) noexcept;
+bool twoNumbersNotEqual(const String&) noexcept;
+bool topGreaterThanLower(const String&) noexcept;
+bool topLessThanLower(const String&) noexcept;
+bool topGreaterThanOrEqualLower(const String&) noexcept;
+bool topLessThanOrEqualLower(const String&) noexcept;
+bool duplicateTop(const String&) noexcept;
 void
 setupLookupTable() noexcept {
     defineWord(F("words"), listWords);
@@ -799,6 +811,19 @@ setupLookupTable() noexcept {
     defineWord(F("drop"), dropTopOfStack);
     defineWord(F("."), popAndPrintStackTop);
     defineWord(F(".s"), printStackContents);
+    defineWord(F("+"), addTwoNumbers);
+    defineWord(F("-"), subtractTwoNumbers);
+    defineWord(F("*"), multiplyTwoNumbers);
+    defineWord(F("/"), divideTwoNumbers);
+    defineWord(F("%"), moduloTwoNumbers);
+    defineWord(F("dup"), duplicateTop);
+    defineWord(F("=="), twoNumbersEqual);
+    defineWord(F("!="), twoNumbersNotEqual);
+    defineWord(F("<"), topLessThanLower);
+    defineWord(F(">"), topGreaterThanLower);
+    defineWord(F("<="), topLessThanOrEqualLower);
+    defineWord(F(">="), topGreaterThanOrEqualLower);
+
     defineSpecialWord<NumericBaseCapture>(F("binary-convert (prefix is 0b)"), F("0b"), 2);
 
     // must come last
