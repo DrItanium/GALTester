@@ -578,11 +578,13 @@ eval(const String& word) noexcept {
     }
 }
 bool pushItemOntoStack(int32_t value) noexcept;
-bool getItemFromStack(int32_t& item) noexcept;
+bool popItemOffStack(int32_t& item) noexcept;
 bool stackEmpty() noexcept;
 bool stackFull() noexcept;
-void clearStack();
-void clearState();
+void clearStack() noexcept;
+void clearState() noexcept;
+uint32_t stackCapacity() noexcept;
+uint32_t numberOfItemsOnStack() noexcept;
 void handleSuccess() noexcept;
 void handleError() noexcept;
 void
@@ -760,3 +762,53 @@ String errorMessage = "";
 constexpr auto numStackElements = 16;
 uint8_t stackPosition = numStackElements;
 uint32_t theStack[numStackElements];
+
+void 
+clearStack() noexcept {
+    stackPosition = numStackElements;
+    for (int i = 0;i < numStackElements; ++i) {
+        theStack[i] = 0;
+    }
+}
+
+
+bool 
+pushItemOntoStack(int32_t value) noexcept {
+    if (stackFull()) {
+        errorMessage = F("stack full");
+        return false;
+    } else {
+        theStack[++stackPosition] = value;
+        return true;
+    }
+}
+bool 
+popItemOffStack(int32_t& item) noexcept {
+    if (stackEmpty()) {
+        errorMessage = F("stack empty");
+        return false;
+    } else {
+        item = theStack[stackPosition];
+        ++stackPosition;
+        return true;
+    }
+}
+bool 
+stackEmpty() noexcept {
+    return stackPosition == numStackElements;
+}
+
+bool 
+stackFull() noexcept {
+    return stackPosition == 0;
+}
+
+uint32_t
+stackCapacity() noexcept {
+    return numStackElements;
+}
+
+uint32_t
+numberOfItemsOnStack() noexcept {
+    return stackCapacity() - stackPosition;
+}
