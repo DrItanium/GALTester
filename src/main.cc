@@ -821,3 +821,8 @@ uint32_t
 numberOfItemsOnStack() noexcept {
     return stackCapacity() - stackPosition;
 }
+bool
+dropTopOfStack() noexcept {
+    int32_t temporary = 0;
+    return popItemOffStack(temporary);
+}
