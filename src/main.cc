@@ -27,6 +27,7 @@
 #include <SPI.h>
 #include <SD.h>
 #include "BoardTarget.h"
+#include <avr/pgmspace.h>
 #ifdef TARGET_BOARD_ARDUINO_UNO 
 constexpr auto CS = 10;
 constexpr auto RESET_IOEXP = 9;
@@ -44,6 +45,9 @@ constexpr auto I1_CLK = 15;
 #else 
 #error "unknown board target!"
 #endif
+
+
+
 enum class IOExpanderAddress : byte {
     GAL_16V8_Element = 0b0000,
     OtherDevice0 = 0b0010,
@@ -612,10 +616,21 @@ Word* findWord(const String& word) noexcept {
     }
     return nullptr;
 }
+enum class ErrorCodes {
+    None,
+    GeneralFailure,
+    UnknownWord,
+    BadNumberConvert,
+    Unimplemented,
+    StackFull,
+    StackEmpty,
+    NotEnoughStackElements,
+    DivideByZero,
+};
 extern String inputString;
 extern bool stringComplete;
 extern unsigned int position;
-extern String errorMessage;
+extern ErrorCodes errorMessage;
 void
 read() {
     while (Serial.available()) {
@@ -635,8 +650,7 @@ eval(const String& word) noexcept {
         if (auto target = findWord(word); target) {
             return target->invoke(word);
         } else {
-            errorMessage = word;
-            errorMessage += '?';
+            errorMessage = ErrorCodes::GeneralFailure;
             return false;
         }
     }
@@ -657,24 +671,56 @@ void clearStack() noexcept;
 void clearState() noexcept;
 uint32_t stackCapacity() noexcept;
 uint32_t numberOfItemsOnStack() noexcept;
-void handleSuccess() noexcept;
-void handleError() noexcept;
-void
-handleSuccess() noexcept {
-    Serial.println(F("\tok"));
-    clearState();
-}
-void 
-handleError() noexcept {
+void handleError(bool errorState) noexcept;
+bool
+handleError(bool errorState, bool stillEvaluating) noexcept {
     // okay so an error happened during evaluation, so we need to clean up
     // and start again
-    Serial.println(errorMessage);
-    clearState();
-    clearStack();
+    switch (errorMessage) {
+        case ErrorCodes::None: 
+            if (!stillEvaluating) {
+                // defer printing out ok until we are done
+                Serial.println(F("\tok"));
+            }
+            break;
+        case ErrorCodes::BadNumberConvert: 
+            Serial.println(F("bad numeric conversion")); 
+            break;
+        case ErrorCodes::DivideByZero: 
+            Serial.println(F("divide by zero")); 
+            break;
+        case ErrorCodes::NotEnoughStackElements:
+            Serial.println(F("stack underflow"));
+            break;
+        case ErrorCodes::StackEmpty:
+            Serial.println(F("stack empty"));
+            break;
+        case ErrorCodes::StackFull:
+            Serial.println(F("stack full"));
+            break;
+        case ErrorCodes::Unimplemented:
+            Serial.println(F("unimplemented"));
+            break;
+        case ErrorCodes::UnknownWord:
+            Serial.println(F("unknown word"));
+            break;
+        default: 
+            Serial.println(F("some error happened")); 
+            break;
+    }
+    if (!stillEvaluating || errorState) {
+        clearState();
+    }
+    if (errorState) {
+        clearStack();
+        return false;
+    }
+    // return true that it is safe to continue evaluation
+    return true;
 }
 void
 clearState() {
-    errorMessage = "";
+    errorMessage = ErrorCodes::None; 
     inputString = "";
     stringComplete = false;
     position = 0;
@@ -692,8 +738,7 @@ eval() noexcept {
                 case '\n':
                     // advance position ahead of time in this case
                     ++position;
-                    if (!eval(subWord)) {
-                        handleError();
+                    if (!handleError(eval(subWord), true)) {
                         return;
                     } else {
                         subWord = "";
@@ -709,11 +754,7 @@ eval() noexcept {
                     break;
             }
         }
-        if (!eval(subWord)) {
-            handleError();
-        } else {
-            handleSuccess();
-        }
+        handleError(eval(subWord), false);
     } 
 }
 
@@ -732,7 +773,7 @@ void operator delete[](void* ptr, size_t) {
 
 bool
 setClkFrequency(const String&) noexcept {
-    errorMessage = F("unimplemented");
+    errorMessage = ErrorCodes::Unimplemented;
     return false;
 }
 class InvokeOnPrefixMatchWord : public Word {
@@ -789,7 +830,6 @@ class NumericBaseCapture : public ParseNumberAndPushOntoStack {
         int base_;
 
 };
-
 bool
 NumericBaseCapture::parse(const String& theValue, int32_t& result) noexcept {
     char* firstBad = nullptr;
@@ -808,9 +848,11 @@ NumericBaseCapture::parse(const String& theValue, int32_t& result) noexcept {
             // we were actually successful! So assign result the number we got
             result = number;
             return true;
+        } else if (strStart == badEnd) {
+            errorMessage = ErrorCodes::UnknownWord;
+            return false;
         } else {
-            // nope the string was invalid!
-            errorMessage = F("bad numeric conversion");
+            errorMessage = ErrorCodes::BadNumberConvert;
             return false;
         }
     } else {
@@ -917,7 +959,7 @@ Word* lookupTable[256] = { 0 };
 String inputString = "";         // a String to hold incoming data
 bool stringComplete = false;  // whether the string is complete
 unsigned int position = 0;
-String errorMessage = "";
+ErrorCodes errorMessage = ErrorCodes::None;
 constexpr auto numStackElements = 16;
 uint8_t stackPosition = numStackElements;
 uint32_t theStack[numStackElements];
@@ -934,7 +976,7 @@ clearStack() noexcept {
 bool 
 pushItemOntoStack(int32_t value) noexcept {
     if (stackFull()) {
-        errorMessage = F("stack full");
+        errorMessage = ErrorCodes::StackFull;
         return false;
     } else {
         theStack[--stackPosition] = value;
@@ -944,7 +986,7 @@ pushItemOntoStack(int32_t value) noexcept {
 bool 
 popItemOffStack(int32_t& item) noexcept {
     if (stackEmpty()) {
-        errorMessage = F("stack empty");
+        errorMessage = ErrorCodes::StackEmpty;
         return false;
     } else {
         item = theStack[stackPosition];
@@ -988,23 +1030,20 @@ popAndPrintStackTop(const String&) noexcept {
 }
 bool
 printStackContents(const String&) noexcept {
-    if (stackEmpty()) {
-        errorMessage = F("stack empty");
-        return false;
-    } else {
+    if (!stackEmpty()) {
         for (int i = numStackElements - 1; i >= stackPosition; --i) {
             Serial.print(theStack[i]);
             Serial.print(F(" "));
         }
-        Serial.println();
-        return true;
     }
+    Serial.println();
+    return true;
 }
 
 bool 
 addTwoNumbers(const String&) noexcept {
     if (numberOfItemsOnStack() < 2) {
-        errorMessage = "not enough items on stack";
+        errorMessage = ErrorCodes::NotEnoughStackElements;
         return false;
     }
     int32_t top, lower;
@@ -1015,7 +1054,7 @@ addTwoNumbers(const String&) noexcept {
 bool 
 subtractTwoNumbers(const String&) noexcept {
     if (numberOfItemsOnStack() < 2) {
-        errorMessage = "not enough items on stack";
+        errorMessage = ErrorCodes::NotEnoughStackElements;
         return false;
     }
     int32_t top, lower;
@@ -1026,7 +1065,7 @@ subtractTwoNumbers(const String&) noexcept {
 bool 
 multiplyTwoNumbers(const String&) noexcept {
     if (numberOfItemsOnStack() < 2) {
-        errorMessage = "not enough items on stack";
+        errorMessage = ErrorCodes::NotEnoughStackElements;
         return false;
     }
     int32_t top, lower;
@@ -1038,14 +1077,14 @@ multiplyTwoNumbers(const String&) noexcept {
 bool 
 divideTwoNumbers(const String&) noexcept {
     if (numberOfItemsOnStack() < 2) {
-        errorMessage = "not enough items on stack";
+        errorMessage = ErrorCodes::NotEnoughStackElements;
         return false;
     }
     int32_t top, lower;
     popItemOffStack(top);
     popItemOffStack(lower);
     if (top == 0) {
-        errorMessage = "divide by zero";
+        errorMessage = ErrorCodes::DivideByZero;
         return false;
     }
     return pushItemOntoStack(lower / top);
@@ -1054,14 +1093,14 @@ divideTwoNumbers(const String&) noexcept {
 bool 
 moduloTwoNumbers(const String&) noexcept {
     if (numberOfItemsOnStack() < 2) {
-        errorMessage = "not enough items on stack";
+        errorMessage = ErrorCodes::NotEnoughStackElements;
         return false;
     }
     int32_t top, lower;
     popItemOffStack(top);
     popItemOffStack(lower);
     if (top == 0) {
-        errorMessage = "divide by zero";
+        errorMessage = ErrorCodes::DivideByZero;
         return false;
     }
     return pushItemOntoStack(lower % top);
@@ -1070,7 +1109,7 @@ moduloTwoNumbers(const String&) noexcept {
 bool 
 twoNumbersEqual(const String&) noexcept {
     if (numberOfItemsOnStack() < 2) {
-        errorMessage = "not enough items on stack";
+        errorMessage = ErrorCodes::NotEnoughStackElements;
         return false;
     }
     int32_t top, lower;
@@ -1081,7 +1120,7 @@ twoNumbersEqual(const String&) noexcept {
 bool 
 twoNumbersNotEqual(const String&) noexcept {
     if (numberOfItemsOnStack() < 2) {
-        errorMessage = "not enough items on stack";
+        errorMessage = ErrorCodes::NotEnoughStackElements;
         return false;
     }
     int32_t top, lower;
@@ -1093,7 +1132,7 @@ twoNumbersNotEqual(const String&) noexcept {
 bool 
 topGreaterThanLower(const String&) noexcept {
     if (numberOfItemsOnStack() < 2) {
-        errorMessage = "not enough items on stack";
+        errorMessage = ErrorCodes::NotEnoughStackElements;
         return false;
     }
     int32_t top, lower;
@@ -1105,7 +1144,7 @@ topGreaterThanLower(const String&) noexcept {
 bool 
 topGreaterThanOrEqualLower(const String&) noexcept {
     if (numberOfItemsOnStack() < 2) {
-        errorMessage = "not enough items on stack";
+        errorMessage = ErrorCodes::NotEnoughStackElements;
         return false;
     }
     int32_t top, lower;
@@ -1117,7 +1156,7 @@ topGreaterThanOrEqualLower(const String&) noexcept {
 bool 
 topLessThanLower(const String&) noexcept {
     if (numberOfItemsOnStack() < 2) {
-        errorMessage = "not enough items on stack";
+        errorMessage = ErrorCodes::NotEnoughStackElements;
         return false;
     }
     int32_t top, lower;
@@ -1128,7 +1167,7 @@ topLessThanLower(const String&) noexcept {
 bool 
 topLessThanOrEqualLower(const String&) noexcept {
     if (numberOfItemsOnStack() < 2) {
-        errorMessage = "not enough items on stack";
+        errorMessage = ErrorCodes::NotEnoughStackElements;
         return false;
     }
     int32_t top, lower;
@@ -1149,7 +1188,7 @@ duplicateTop(const String&) noexcept {
 bool
 setIOPinMode(const String&) noexcept {
     if (numberOfItemsOnStack() < 2) {
-        errorMessage = "not enough items on stack";
+        errorMessage = ErrorCodes::NotEnoughStackElements;
         return false;
     }
     int32_t mode, targetPin;
