@@ -25,13 +25,14 @@
 
 #include <Arduino.h>
 #include <SPI.h>
-#ifdef ARDUINO_AVR_UNO
+#include "TargetBoard.h"
+#ifdef TARGET_BOARD_ARDUINO_UNO 
 constexpr auto CS = 10;
 constexpr auto RESET_IOEXP = 9;
 constexpr auto IOEXP_INT = 8;
 constexpr auto I9 = 7;
 constexpr auto I1_CLK = 6;
-#elif defined(ARDUINO_NRF52_ADAFRUIT) && defined(NRF52832_XXAA)
+#elif defined(TARGET_BOARD_NRF52832_BLUEFRUIT_FEATHER)
 constexpr auto CS = 27;
 constexpr auto RESET_IOEXP = 30;
 constexpr auto IOEXP_INT = 11;
