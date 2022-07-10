@@ -380,6 +380,29 @@ GALInterface::printPinStates() const noexcept {
         Serial.print(getClockFrequency());
     }
     Serial.println(F(")"));
+    for (int i = 1; i < 9; ++i) {
+        Serial.print(F("P"));
+        Serial.print(i + 1);
+        Serial.print(F(": I ("));
+        if (getInputState(i)) {
+            Serial.print(F("HIGH"));
+        } else {
+            Serial.print(F("LOW"));
+        }
+        Serial.println(F(")"));
+    }
+    Serial.println(F("P10: GND"));
+    Serial.print(F("P11: I/~{OE} ("));
+    if (getInputState(9)) {
+        Serial.print(F("HIGH"));
+    } else {
+        Serial.print(F("LOW"));
+    }
+    Serial.println(F(")"));
+
+
+    Serial.println(F("P20: VCC"));
+
 }
 GALInterface iface(CS, 
         I9, 
@@ -442,7 +465,7 @@ void
 displayPinout() noexcept {
     iface.printPinStates();
 }
-Word* lookupTable[] = { 
+Word* lookupTable[256] = { 
     new LambdaWord("words", listWords),
     new LambdaWord("pinout", displayPinout),
 };
