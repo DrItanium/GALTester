@@ -478,16 +478,12 @@ void loop() {
 }
 
 
-String inputString = "";         // a String to hold incoming data
-bool stringComplete = false;  // whether the string is complete
-unsigned int position = 0;
-String getNextWordFromInput() noexcept {
 class Word {
     public:
         explicit Word(const String& name) : name_(name) { }
         virtual ~Word() = default;
         [[nodiscard]] virtual bool matches(const String& name) const noexcept { return name == name_; }
-        virtual void invoke() noexcept = 0;
+        virtual void invoke(const String& match) noexcept = 0;
         const String& getName() const noexcept { return name_; }
     private:
         String name_;
@@ -495,17 +491,18 @@ class Word {
 class LambdaWord : public Word {
     public:
         using Parent = Word;
-        using Function = void (*)();
+        using Function = void (*)(const String&);
         explicit LambdaWord(const String& name, Function theFunction) : Parent(name), func_(theFunction)  { }
         ~LambdaWord() override = default;
-        void invoke() noexcept override {
-            func_();
+        void invoke(const String& match) noexcept override {
+            func_(match);
         }
     private:
         Function func_;
 };
 extern Word* lookupTable[256];
-void listWords() noexcept {
+void 
+listWords(const String&) noexcept {
     Serial.println(F("Registered Words:"));
     int count = 0;
     for (auto* word : lookupTable) {
@@ -522,7 +519,7 @@ void listWords() noexcept {
     Serial.println();
 }
 void
-displayPinout() noexcept {
+displayPinout(const String&) noexcept {
     iface.printPinStates();
 }
 void 
@@ -534,7 +531,7 @@ GALInterface::displayRegisters() const noexcept {
     Serial.println(inputPinState_.getMaskedState(), BIN);
 }
 void 
-displayRegisters() noexcept {
+displayRegisters(const String&) noexcept {
     iface.displayRegisters();
 }
 
@@ -547,6 +544,10 @@ Word* findWord(const String& word) noexcept {
     }
     return nullptr;
 }
+extern String inputString;
+extern bool stringComplete;
+extern unsigned int position;
+extern String errorMessage;
 void
 read() {
     while (Serial.available()) {
@@ -557,20 +558,49 @@ read() {
         } 
     }
 }
-void
+bool
 eval(const String& word) noexcept {
     if (word.length() == 0) {
-        return;
+        return true;
     } else {
         if (auto target = findWord(word); target) {
-            target->invoke();
+            return target->invoke(word);
         } else {
-            Serial.print(F("UNKNOWN WORD: \""));
-            Serial.print(word);
-            Serial.println(F("\""));
+            errorMessage = word;
+            errorMessage += '?';
+            return false;
         }
     }
 }
+bool pushItemOntoStack(int32_t value) noexcept;
+bool getItemFromStack(int32_t& item) noexcept;
+bool stackEmpty() noexcept;
+bool stackFull() noexcept;
+void clearStack();
+void clearState();
+void handleSuccess() noexcept;
+void handleError() noexcept;
+void
+handleSuccess() noexcept {
+    Serial.println(F("\tok"));
+    clearState();
+}
+void 
+handleError() noexcept {
+    // okay so an error happened during evaluation, so we need to clean up
+    // and start again
+    Serial.println(errorMessage);
+    clearState();
+    clearStack();
+}
+void
+clearState() {
+    errorMessage = "";
+    inputString = "";
+    stringComplete = false;
+    position = 0;
+}
+
 void
 eval() noexcept {
     if (stringComplete) {
@@ -583,8 +613,12 @@ eval() noexcept {
                 case '\n':
                     // advance position ahead of time in this case
                     ++position;
-                    eval(subWord);
-                    subWord = "";
+                    if (!eval(subWord)) {
+                        handleError();
+                        return;
+                    } else {
+                        subWord = "";
+                    }
                     break;
                 case '\r':
                     // carriage returns should be ignored
@@ -596,13 +630,11 @@ eval() noexcept {
                     break;
             }
         }
-        if (subWord.length() != 0) {
-            eval(subWord);
-            subWord = "";
-        } 
-        Serial.println(F("\tok"));
-        // carry out the last word if we ended with a newline
-        inputString = "";
+        if (!eval(subWord)) {
+            handleError();
+        } else {
+            handleSuccess();
+        }
     } 
 }
 
@@ -620,20 +652,74 @@ void operator delete[](void* ptr, size_t) {
 #endif
 
 void 
-setClkFrequency() noexcept {
+setClkFrequency(const String&) noexcept {
 }
 class InvokeOnPrefixMatchWord : public Word {
     public:
-        InvokeOnPrefixMatchWord(const String& name, const String& prefix) : Word(name), prefix_(prefix)  { }
+        InvokeOnPrefixMatchWord(const String& name, const String& prefix) : Word(name), prefix_(prefix) { }
         ~InvokeOnPrefixMatchWord() override = default;
         bool matches(const String& message) const noexcept override { return message.startsWith(prefix_); }
+        void invoke(const String& match) noexcept override;
+    protected:
+        virtual void invoke0(const String& substringMatch) noexcept = 0;
     private:
         String prefix_;
 };
 
-Word* lookupTable[256] = { 
-    new LambdaWord("words", listWords),
-    new LambdaWord("pins", displayPinout),
-    new LambdaWord("status", displayRegisters),
-    new LambdaWord("set-clock-frequency", setClkFrequency),
+void
+InvokeOnPrefixMatchWord::invoke(const String& match) noexcept {
+    // if we got here then it is safe to strip the prefix off
+    auto substring = match.substring(prefix_.length());
+    invoke0(substring);
+}
+class ParseNumberAndPushOntoStack : public InvokeOnPrefixMatchWord {
+    public:
+        ParseNumberAndPushOntoStack(const String& name, const String& prefix) : InvokeOnPrefixMatchWord(name, prefix) { }
+        ~ParseNumberAndPushOntoStack() override = default;
+    protected:
+        bool invoke0(const String& substringMatch) noexcept override;
+        virtual bool parse(const String& theValue, int32_t& number) noexcept = 0;
 };
+
+bool
+ParseNumberAndPushOntoStack::invoke0(const String& match) noexcept {
+    uint32_t value = 0;
+    if (parse(match, value)) {
+        return pushItemOntoStack(value);
+    } else {
+        return false;
+    }
+}
+
+class NumericBaseCapture : public ParseNumberAndPushOntoStack {
+    public:
+        BinaryCaptureWord(const String& name, const String& prefix, byte numericBase) : InvokeOnPrefixMatchWord(name, prefix), base_(base) { }
+    protected:
+        bool parse(const String& theValue, int32_t& number) noexcept override;
+    private:
+        byte base_;
+
+};
+
+bool
+NumericBaseCapture::parse(const String& theValue, int32_t& result) noexcept {
+    errorMessage = "not implemented";
+    return false;
+}
+
+Word* lookupTable[256] = { 
+    new LambdaWord(F("words"), listWords),
+    new LambdaWord(F("pins"), displayPinout),
+    new LambdaWord(F("status"), displayRegisters),
+    new LambdaWord(F("set-clock-frequency"), setClkFrequency),
+    new LambdaWord(F("high"), [](const String&) { return pushItemOntoStack(1); }),
+    new LambdaWord(F("low"), [](const String&) { return pushItemOntoStack(0); }),
+};
+
+String inputString = "";         // a String to hold incoming data
+bool stringComplete = false;  // whether the string is complete
+unsigned int position = 0;
+String errorMessage = "";
+constexpr auto numStackElements = 16;
+uint8_t stackPosition = numStackElements;
+uint32_t theStack[numStackElements];
