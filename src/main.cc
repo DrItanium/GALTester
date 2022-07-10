@@ -394,7 +394,7 @@ String inputString = "";         // a String to hold incoming data
 bool stringComplete = false;  // whether the string is complete
 bool gotResult = false;
 String result = "";
-
+unsigned int position = 0;
 void
 read() {
     while (Serial.available()) {
@@ -402,16 +402,51 @@ read() {
         inputString += inChar;
         if (inChar == '\n') {
             stringComplete = true;
-        }
+        } 
     }
 }
 void
-eval() {
+eval(const String& word) noexcept {
+    if (word.length() == 0) {
+        return;
+    } else {
+        
+    }
+}
+void
+eval() noexcept {
     if (stringComplete) {
-        Serial.print(F("GOT: "));
-        Serial.println(inputString);
-        inputString = "";
         stringComplete = false;
+        String subWord = "";
+        for (position = 0; position < inputString.length(); ) {
+            switch (auto c = inputString[position]; c) {
+                case ' ':
+                case '\t':
+                case '\n':
+                    // advance position ahead of time in this case
+                    ++position;
+                    eval(subWord);
+                    subWord = "";
+                    break;
+                case '\r':
+                    // carriage returns should be ignored
+                    ++position;
+                    break;
+                default:
+                    subWord += c;
+                    ++position;
+                    break;
+            }
+        }
+        if (subWord.length() != 0) {
+            eval(subWord);
+            subWord = "";
+        } 
+        result = "ok";
+        gotResult = true;
+        // carry out the last word if we ended with a newline
+        inputString = "";
+    } else {
         gotResult = false;
     }
 }
@@ -419,22 +454,13 @@ void
 print() {
     if (gotResult) {
         Serial.println(result);
+        result = "";
     }
 }
-volatile uint32_t index = 0;
+
 void
 loop() {
-#if 0
     read();
     eval();
     print();
-#else
-    iface.setInputs(index);
-    Serial.print(F("INPUTS: 0b"));
-    Serial.println(index, BIN);
-    Serial.print(F("OUTPUTS: 0b"));
-    Serial.println(iface.readOutputs(), BIN);
-    ++index;
-    delay(1000);
-#endif
 }
