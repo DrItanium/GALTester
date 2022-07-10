@@ -588,7 +588,9 @@ eval(const String& word) noexcept {
         }
     }
 }
+struct TreatAsBoolean { };
 bool pushItemOntoStack(int32_t value) noexcept;
+bool pushItemOntoStack(bool value, TreatAsBoolean) noexcept { return pushItemOntoStack(value ? 0xFFFF'FFFF : 0); }
 template<int32_t constant>
 bool pushItemOntoStack(const String&) noexcept { 
     return pushItemOntoStack(constant);
@@ -819,8 +821,8 @@ setupLookupTable() noexcept {
     defineWord(F("dup"), duplicateTop);
     defineWord(F("=="), twoNumbersEqual);
     defineWord(F("!="), twoNumbersNotEqual);
-    defineWord(F("<"), topLessThanLower);
-    defineWord(F(">"), topGreaterThanLower);
+    defineWord(F(">"), topLessThanLower);
+    defineWord(F("<"), topGreaterThanLower);
     defineWord(F("<="), topLessThanOrEqualLower);
     defineWord(F(">="), topGreaterThanOrEqualLower);
 
@@ -918,6 +920,151 @@ printStackContents(const String&) noexcept {
         }
         Serial.println();
         return true;
+    }
+}
+
+bool 
+addTwoNumbers(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = "not enough items on stack";
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    return pushItemOntoStack(lower + top);
+}
+bool 
+subtractTwoNumbers(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = "not enough items on stack";
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    return pushItemOntoStack(lower - top);
+}
+bool 
+multiplyTwoNumbers(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = "not enough items on stack";
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    return pushItemOntoStack(lower * top);
+}
+
+bool 
+divideTwoNumbers(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = "not enough items on stack";
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    if (top == 0) {
+        errorMessage = "divide by zero";
+        return false;
+    }
+    return pushItemOntoStack(lower / top);
+}
+
+bool 
+moduloTwoNumbers(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = "not enough items on stack";
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    if (top == 0) {
+        errorMessage = "divide by zero";
+        return false;
+    }
+    return pushItemOntoStack(lower % top);
+}
+
+bool 
+twoNumbersEqual(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = "not enough items on stack";
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    return pushItemOntoStack(lower == top, TreatAsBoolean{});
+}
+bool 
+twoNumbersNotEqual(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = "not enough items on stack";
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    return pushItemOntoStack(lower != top, TreatAsBoolean{});
+}
+
+bool 
+topGreaterThanLower(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = "not enough items on stack";
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    return pushItemOntoStack(lower < top, TreatAsBoolean{});
+}
+
+bool 
+topGreaterThanOrEqualLower(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = "not enough items on stack";
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    return pushItemOntoStack(lower <= top, TreatAsBoolean{});
+}
+
+bool 
+topLessThanLower(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = "not enough items on stack";
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    return pushItemOntoStack(lower > top, TreatAsBoolean{});
+}
+bool 
+topLessThanOrEqualLower(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = "not enough items on stack";
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    return pushItemOntoStack(lower >= top, TreatAsBoolean{});
+}
+bool 
+duplicateTop(const String&) noexcept {
+    int32_t result = 0;
+    if (popItemOffStack(result)) {
+        return pushItemOntoStack(result) && pushItemOntoStack(result);
+    } else {
+        return false;
     }
 }
 
