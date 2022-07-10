@@ -681,7 +681,7 @@ class InvokeOnPrefixMatchWord : public Word {
         String prefix_;
 };
 bool
-InvokeOnPrefixMatchWord::matches(const String& word) noexcept {
+InvokeOnPrefixMatchWord::matches(const String& word) const noexcept {
     if (prefix_.length() == 0) {
         return true;
     } else {
