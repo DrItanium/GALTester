@@ -673,18 +673,26 @@ class InvokeOnPrefixMatchWord : public Word {
     public:
         InvokeOnPrefixMatchWord(const String& name, const String& prefix) : Word(name), prefix_(prefix) { }
         ~InvokeOnPrefixMatchWord() override = default;
-        bool matches(const String& message) const noexcept override { return message.startsWith(prefix_); }
+        bool matches(const String& message) const noexcept override;
         bool invoke(const String& match) noexcept override;
     protected:
         virtual bool invoke0(const String& substringMatch) noexcept = 0;
     private:
         String prefix_;
 };
-
+bool
+InvokeOnPrefixMatchWord::matches(const String& word) noexcept {
+    if (prefix_.length() == 0) {
+        return true;
+    } else {
+        return word.startsWith(prefix_);
+    }
+}
 bool
 InvokeOnPrefixMatchWord::invoke(const String& match) noexcept {
     // if we got here then it is safe to strip the prefix off
     auto substring = match.substring(prefix_.length());
+    substring.trim();
     return invoke0(substring);
 }
 class ParseNumberAndPushOntoStack : public InvokeOnPrefixMatchWord {
@@ -719,17 +727,33 @@ class NumericBaseCapture : public ParseNumberAndPushOntoStack {
 bool
 NumericBaseCapture::parse(const String& theValue, int32_t& result) noexcept {
     char* firstBad = nullptr;
-    auto number = strtol(theValue.c_str(), &firstBad, base_); 
+    auto theStr = theValue.c_str();
+    auto number = strtol(theStr, &firstBad, base_); 
     if (firstBad != nullptr) {
-        // okay so we got a bad conversion
-        errorMessage = F("bad numeric conversion");
-        return false;
+        // okay so we may have got a bad conversion
+        // it could also be that we were successful but strtoul views the
+        // character beyond the end as "bad"
+        // 
+        // So convert the pointer addresses and do some calculations to see if
+        // we were actually unsuccessful
+        auto strStart = reinterpret_cast<uint32_t>(theStr);
+        auto badEnd = reinterpret_cast<uint32_t>(firstBad);
+        if ((strStart + theValue.length()) == badEnd) {
+            // we were actually successful! So assign result the number we got
+            result = number;
+            return true;
+        } else {
+            // nope the string was invalid!
+            errorMessage = F("bad numeric conversion");
+            return false;
+        }
     } else {
         // okay so we were successful
         result = number;
         return true;
     }
 }
+
 uint32_t lookupTableCount = 0;
 bool
 defineWord(Word* theWord) noexcept {
@@ -749,6 +773,8 @@ bool
 defineSpecialWord(const String& name, Args&& ... args) noexcept {
     return defineWord(new T(name, args...));
 }
+bool popAndPrintStackTop(const String&) noexcept;
+bool printStackContents(const String&) noexcept;
 void
 setupLookupTable() noexcept {
     defineWord(F("words"), listWords);
@@ -760,7 +786,15 @@ setupLookupTable() noexcept {
     defineWord(F("false"), pushItemOntoStack<0>);
     defineWord(F("low"), pushItemOntoStack<0>);
     defineWord(F("drop"), dropTopOfStack);
+    defineWord(F("."), popAndPrintStackTop);
+    defineWord(F(".s"), printStackContents);
     defineSpecialWord<NumericBaseCapture>(F("binary-convert (prefix is 0b)"), F("0b"), 2);
+
+    // must come last
+    if (!defineSpecialWord<NumericBaseCapture>(F("fallback-capture (prefix is nothing)"), "", 0)) {
+        Serial.println(F("TOO MANY WORDS DEFINED! HALTING!!"));
+        while (true);
+    }
 }
 Word* lookupTable[256] = { 0 };
 
@@ -826,3 +860,28 @@ dropTopOfStack() noexcept {
     int32_t temporary = 0;
     return popItemOffStack(temporary);
 }
+bool
+popAndPrintStackTop(const String&) noexcept {
+    int32_t value = 0;
+    if (popItemOffStack(value)) {
+        Serial.print(value);
+        return true;
+    } else {
+        return false;
+    }
+}
+bool
+printStackContents(const String&) noexcept {
+    if (stackEmpty()) {
+        errorMessage = F("stack empty");
+        return false;
+    } else {
+        for (int i = numStackElements - 1; i >= stackPosition; --i) {
+            Serial.print(theStack[i]);
+            Serial.print(F(" "));
+        }
+        Serial.println();
+        return true;
+    }
+}
+
