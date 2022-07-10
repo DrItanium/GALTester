@@ -673,15 +673,11 @@ uint32_t stackCapacity() noexcept;
 uint32_t numberOfItemsOnStack() noexcept;
 void handleError(bool errorState) noexcept;
 bool
-handleError(bool errorState, bool stillEvaluating) noexcept {
+handleError(bool state, bool stillEvaluating) noexcept {
     // okay so an error happened during evaluation, so we need to clean up
     // and start again
     switch (errorMessage) {
         case ErrorCodes::None: 
-            if (!stillEvaluating) {
-                // defer printing out ok until we are done
-                Serial.println(F("\tok"));
-            }
             break;
         case ErrorCodes::BadNumberConvert: 
             Serial.println(F("bad numeric conversion")); 
@@ -708,13 +704,13 @@ handleError(bool errorState, bool stillEvaluating) noexcept {
             Serial.println(F("some error happened")); 
             break;
     }
-    clearState();
-    if (errorState) {
-        clearStack();
-        return false;
+    if (!stillEvaluating || !state) {
+        clearState();
     }
-    // return true that it is safe to continue evaluation
-    return true;
+    if (!state) {
+        clearStack();
+    }
+    return state;
 }
 void
 clearState() {
@@ -752,7 +748,10 @@ eval() noexcept {
                     break;
             }
         }
-        handleError(eval(subWord), false);
+        if (handleError(eval(subWord), false)) {
+            // defer printing out ok until we are done
+            Serial.println(F("\tok"));
+        }
     } 
 }
 
