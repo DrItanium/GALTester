@@ -23,10 +23,10 @@
  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "BoardTarget.h"
 #include <Arduino.h>
 #include <SPI.h>
 #include <SD.h>
-#include "BoardTarget.h"
 #include <avr/pgmspace.h>
 #ifdef TARGET_BOARD_ARDUINO_UNO
 constexpr auto CS = 10;
@@ -37,6 +37,10 @@ constexpr auto I1_CLK = 6;
 constexpr auto CardDetect = 5;
 constexpr auto SDSelect = 4;
 #elif defined(TARGET_BOARD_ARDUINO_MEGA2560)
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_ILI9341.h>
+#include <Adafruit_FT6206.h>
 constexpr auto CS = A0;
 constexpr auto RESET_IOEXP = A2;
 constexpr auto IOEXP_INT = 2;
@@ -46,6 +50,9 @@ constexpr auto CardDetect = -1;
 constexpr auto SDSelect = 4;
 constexpr auto TFTCS = 10;
 constexpr auto TFTDC = 9;
+
+Adafruit_ILI9341 tft(TFTCS, TFTDC);
+Adafruit_FT6206 tscreen;
 #elif defined(TARGET_BOARD_NRF52832_BLUEFRUIT_FEATHER)
 constexpr auto CS = 27;
 constexpr auto RESET_IOEXP = 30;
@@ -525,6 +532,28 @@ setup() {
     Serial.println(F("GAL Testing Interface"));
     Serial.println(F("(C) 2022 Joshua Scoggins"));
     Serial.println(F("This is open source software! See LICENSE for details"));
+#ifdef TARGET_BOARD_ARDUINO_MEGA2560
+    Serial.println();
+    Serial.println(F("TFT Bringup"));
+    tft.begin();
+    auto x = tft.readcommand8(ILI9341_RDMODE);
+    Serial.print(F("Display Power Mode: 0x")); Serial.println(x, HEX);
+    x = tft.readcommand8(ILI9341_RDMADCTL);
+    Serial.print(F("MADCTL Mode: 0x")); Serial.println(x, HEX);
+    x = tft.readcommand8(ILI9341_RDPIXFMT);
+    Serial.print(F("Pixel Format: 0x")); Serial.println(x, HEX);
+    x = tft.readcommand8(ILI9341_RDIMGFMT);
+    Serial.print(F("Image Format: 0x")); Serial.println(x, HEX);
+    x = tft.readcommand8(ILI9341_RDSELFDIAG);
+    Serial.print(F("Self Diagnostic: 0x")); Serial.println(x, HEX);
+    Serial.println();
+    Serial.println(F("Clearing Screen!"));
+    tft.fillScreen(ILI9341_BLACK);
+
+    Serial.println();
+    Serial.println(F("Touchscreen Bringup"));
+    tscreen.begin();
+#endif
     SPI.begin();
     setupLookupTable();
     iface.begin();
@@ -532,16 +561,19 @@ setup() {
 #ifndef TARGET_BOARD_ARDUINO_UNO
     pinMode(SDSelect, OUTPUT);
     digitalWrite(SDSelect, HIGH);
-    pinMode(CardDetect, INPUT);
+    if constexpr (CardDetect != -1) {
+        pinMode(CardDetect, INPUT);
+    }
     Serial.println(F("Checking for an SD Card..."));
     if (!SD.begin(SDSelect)) {
-        if (digitalRead(CardDetect) == HIGH) {
-            Serial.println(F("SD CARD FOUND BUT ERROR OCCURRED DURING INIT!"));
-        } else {
-            Serial.println(F("SD CARD NOT INSERTED"));
-        }
-
-        Serial.println(F("SD CARD WILL NOT BE AVAILABLE!!!"));
+        if constexpr (CardDetect != -1) {
+            if (digitalRead(CardDetect) == HIGH) {
+                Serial.println(F("SD CARD FOUND BUT ERROR OCCURRED DURING INIT!"));
+            } else {
+                Serial.println(F("SD CARD NOT INSERTED"));
+            }
+        } 
+        Serial.println(F("SD CARD NOT AVAILABLE!!!"));
     } else {
         sdEnabled = true;
         Serial.println(F("SD CARD AVAILABLE!"));
