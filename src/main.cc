@@ -28,7 +28,7 @@
 #include <SD.h>
 #include "BoardTarget.h"
 #include <avr/pgmspace.h>
-#ifdef TARGET_BOARD_ARDUINO_UNO 
+#ifdef TARGET_BOARD_ARDUINO_UNO
 constexpr auto CS = 10;
 constexpr auto RESET_IOEXP = 9;
 constexpr auto IOEXP_INT = 8;
@@ -36,6 +36,16 @@ constexpr auto I9 = 7;
 constexpr auto I1_CLK = 6;
 constexpr auto CardDetect = 5;
 constexpr auto SDSelect = 4;
+#elif defined(TARGET_BOARD_ARDUINO_MEGA2560)
+constexpr auto CS = A0;
+constexpr auto RESET_IOEXP = A2;
+constexpr auto IOEXP_INT = 2;
+constexpr auto I9 = A1;
+constexpr auto I1_CLK = 5;
+constexpr auto CardDetect = -1;
+constexpr auto SDSelect = 4;
+constexpr auto TFTCS = 10;
+constexpr auto TFTDC = 9;
 #elif defined(TARGET_BOARD_NRF52832_BLUEFRUIT_FEATHER)
 constexpr auto CS = 27;
 constexpr auto RESET_IOEXP = 30;
