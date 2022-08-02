@@ -935,6 +935,7 @@ bool topGreaterThanOrEqualLower(const String&) noexcept;
 bool topLessThanOrEqualLower(const String&) noexcept;
 bool duplicateTop(const String&) noexcept;
 bool setIOPinMode(const String&) noexcept;
+bool touchPoint(const String&) noexcept;
 void
 setupLookupTable() noexcept {
     defineWord(F("words"), listWords);
@@ -957,6 +958,7 @@ setupLookupTable() noexcept {
     defineWord(F("<="), topLessThanOrEqualLower);
     defineWord(F(">="), topGreaterThanOrEqualLower);
     defineWord(F("io-pin-mode"), setIOPinMode);
+    defineWord(F("touch-point"), touchPoint);
 #define X(str, target) defineWord(F(str) , pushItemOntoStack<target>)
     X("input", INPUT);
     X("output", OUTPUT);
@@ -1238,3 +1240,13 @@ setIOPinMode(const String&) noexcept {
     return true;
 }
 
+
+bool
+touchPoint(const String&) noexcept {
+    if (tscreen.touched()) {
+        auto p = tscreen.getPoint();
+        return pushItemOntoStack(p.y) && pushItemOntoStack(p.x);
+    } else {
+        return pushItemOntoStack(-1) && pushItemOntoStack(-1);
+    }
+}
