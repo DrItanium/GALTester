@@ -52,7 +52,7 @@ constexpr auto TFTCS = 10;
 constexpr auto TFTDC = 9;
 
 Adafruit_ILI9341 tft(TFTCS, TFTDC);
-Adafruit_FT6206 tscreen;
+Adafruit_FT6206 ts;
 #elif defined(TARGET_BOARD_NRF52832_BLUEFRUIT_FEATHER)
 constexpr auto CS = 27;
 constexpr auto RESET_IOEXP = 30;
@@ -526,6 +526,7 @@ GALInterface iface(CS,
         IOExpanderAddress::GAL_16V8_Element);
 void setupLookupTable() noexcept; 
 volatile bool sdEnabled = false;
+void setupDisplay() noexcept;
 void 
 setup() {
     Serial.begin(115200);
@@ -547,12 +548,11 @@ setup() {
     x = tft.readcommand8(ILI9341_RDSELFDIAG);
     Serial.print(F("Self Diagnostic: 0x")); Serial.println(x, HEX);
     Serial.println();
-    Serial.println(F("Clearing Screen!"));
-    tft.fillScreen(ILI9341_BLACK);
 
     Serial.println();
     Serial.println(F("Touchscreen Bringup"));
-    tscreen.begin();
+    ts.begin();
+    setupDisplay();
 #endif
     SPI.begin();
     setupLookupTable();
@@ -586,6 +586,7 @@ void eval() noexcept;
 void loop() {
     read();
     eval();
+    yield();
 }
 
 
@@ -935,7 +936,6 @@ bool topGreaterThanOrEqualLower(const String&) noexcept;
 bool topLessThanOrEqualLower(const String&) noexcept;
 bool duplicateTop(const String&) noexcept;
 bool setIOPinMode(const String&) noexcept;
-bool touchPoint(const String&) noexcept;
 void
 setupLookupTable() noexcept {
     defineWord(F("words"), listWords);
@@ -958,7 +958,6 @@ setupLookupTable() noexcept {
     defineWord(F("<="), topLessThanOrEqualLower);
     defineWord(F(">="), topGreaterThanOrEqualLower);
     defineWord(F("io-pin-mode"), setIOPinMode);
-    defineWord(F("touch-point"), touchPoint);
 #define X(str, target) defineWord(F(str) , pushItemOntoStack<target>)
     X("input", INPUT);
     X("output", OUTPUT);
@@ -1241,12 +1240,23 @@ setIOPinMode(const String&) noexcept {
 }
 
 
-bool
-touchPoint(const String&) noexcept {
-    if (tscreen.touched()) {
-        auto p = tscreen.getPoint();
-        return pushItemOntoStack(p.y) && pushItemOntoStack(p.x);
+#ifdef TARGET_BOARD_ARDUINO_MEGA2560
+void
+setupDisplay() noexcept {
+    Serial.println(F("Clearing Screen!"));
+    tft.fillScreen(ILI9341_BLACK);
+    tft.fillRect(0, 0, tft.width() / 8, tft.height() / 8, ILI9341_YELLOW);
+    tft.fillRect(tft.width() / 8, 0, tft.width() / 8, tft.height() / 8, ILI9341_GREEN);
+    tft.fillRect((2 * tft.width()) / 8, 0, tft.width() / 8, tft.height() / 8, ILI9341_CYAN);
+    tft.fillRect((3 * tft.width()) / 8, 0, tft.width() / 8, tft.height() / 8, ILI9341_RED);
+    tft.fillRect((4 * tft.width()) / 8, 0, tft.width() / 8, tft.height() / 8, ILI9341_BLUE);
+    tft.fillRect((5 * tft.width()) / 8, 0, tft.width() / 8, tft.height() / 8, ILI9341_WHITE);
+}
+void 
+yield() {
+    if (ts.touched()) {
+        // figure out where we are touching and do some sort of operations
     } else {
-        return pushItemOntoStack(-1) && pushItemOntoStack(-1);
     }
 }
+#endif
