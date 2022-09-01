@@ -542,6 +542,9 @@ struct Configuration {
 };
 volatile bool sdEnabled = false;
 void setupDisplay() noexcept;
+void setupLookupTable() noexcept; 
+void read() noexcept;
+void eval() noexcept;
 void 
 setup() {
     Serial.begin(9600);
@@ -569,6 +572,7 @@ setup() {
     ts.begin();
     setupDisplay();
     SPI.begin();
+    setupLookupTable();
     iface.begin();
     iface.configureIOPins(0);
     pinMode(SDSelect, OUTPUT);
@@ -592,7 +596,6 @@ setup() {
         // load the configuration from the SDCard to set everything up?
     }
     Serial.println();
-    // generate a random maze
 }
 void forwardClear(int x, int y, int count) noexcept {
     tft.setTextColor(ILI9341_BLACK);
@@ -605,25 +608,9 @@ void forwardClear(int x, int y, int count) noexcept {
 }
 
 void loop() {
-    tft.setCursor(0,0);
-    tft.fillScreen(ILI9341_BLACK);
-    iface.printPinStates(Serial);
-    iface.printPinStates(tft);
-#if 0
-    tft.print(F("Inputs: 0x")); 
-    forwardClear(4);
-    tft.println(0xFDED, HEX);
-    tft.print(F("Outputs: 0x")); 
-    forwardClear(2);
-    tft.println(0xFF, HEX);
-    tft.print(F("CLK: ")); 
-    forwardClear(1);
-    tft.println(1);
-    tft.print(F("OE: ")); 
-    forwardClear(1);
-    tft.println(0);
-#endif
-    delay(1000);
+    read();
+    eval();
+    yield();
 }
 
 
@@ -676,22 +663,22 @@ void
 setupDisplay() noexcept {
     Serial.println(F("Clearing Screen!"));
     tft.fillScreen(ILI9341_BLACK);
-    auto properWidth = tft.width()/2;
-    auto properHeight = tft.height() / 8;
-    Area test(properWidth, 0, properWidth, properHeight, ILI9341_YELLOW);
-    Area test2(properWidth,properHeight*1, properWidth, properHeight, ILI9341_GREEN);
-    Area test3(properWidth,properHeight*2, properWidth, properHeight, ILI9341_CYAN);
-    Area test4(properWidth,properHeight*3, properWidth, properHeight, ILI9341_RED);
-    Area test5(properWidth,properHeight*4, properWidth, properHeight, ILI9341_BLUE);
-    Area test6(properWidth,properHeight*5, properWidth, properHeight, ILI9341_WHITE);
-    test.fillRect(tft);
-    test2.fillRect(tft);
-    test3.fillRect(tft);
-    test4.fillRect(tft);
-    test5.fillRect(tft);
-    test6.fillRect(tft);
-    delay(3000);
-    tft.fillScreen(ILI9341_BLACK);
+    //auto properWidth = tft.width()/2;
+    //auto properHeight = tft.height() / 8;
+    //Area test(properWidth, 0, properWidth, properHeight, ILI9341_YELLOW);
+    //Area test2(properWidth,properHeight*1, properWidth, properHeight, ILI9341_GREEN);
+    //Area test3(properWidth,properHeight*2, properWidth, properHeight, ILI9341_CYAN);
+    //Area test4(properWidth,properHeight*3, properWidth, properHeight, ILI9341_RED);
+    //Area test5(properWidth,properHeight*4, properWidth, properHeight, ILI9341_BLUE);
+    //Area test6(properWidth,properHeight*5, properWidth, properHeight, ILI9341_WHITE);
+    //test.fillRect(tft);
+    //test2.fillRect(tft);
+    //test3.fillRect(tft);
+    //test4.fillRect(tft);
+    //test5.fillRect(tft);
+    //test6.fillRect(tft);
+    //delay(3000);
+    //tft.fillScreen(ILI9341_BLACK);
 }
 
 
