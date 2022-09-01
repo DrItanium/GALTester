@@ -27,14 +27,6 @@
 #define GAL_TESTER_BOARD_TARGET_H__
 #ifdef ARDUINO_AVR_UNO
 #define TARGET_BOARD_ARDUINO_UNO
-#elif defined(ARDUINO_AVR_ATmega2560)
-#define TARGET_BOARD_ARDUINO_MEGA2560
-#elif defined(ARDUINO_NRF52_ADAFRUIT) 
-#if defined(NRF52832_XXAA)
-#define TARGET_BOARD_NRF52832_BLUEFRUIT_FEATHER
-#else
-#error "unknown NRF52 series board"
-#endif
 #else 
 #error "unknown board!"
 #endif
