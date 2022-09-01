@@ -777,7 +777,13 @@ void
 read() {
     while (Serial.available()) {
         char inChar = static_cast<char>(Serial.read());
-        inputString += inChar;
+        if (inChar == 0x08) {
+            if (inputString.length() > 0) {
+                inputString.remove(inputString.length() - 1, 1);
+            }
+        } else {
+            inputString += inChar;
+        }
         Serial.print(inChar);
         if (inChar == '\n') {
             stringComplete = true;
