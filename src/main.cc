@@ -209,7 +209,60 @@ class GALInterface {
         constexpr auto getClockFrequency() const noexcept { return clockFrequency_; }
         void setInput(int pin, bool state) noexcept;
         bool getInputState(int pin) const noexcept;
-        void printPinStates() const noexcept;
+        template<typename T>
+        void 
+        printPinStates(T& thing) const noexcept {
+            thing.println(F("Pin states as seen from the perspective of the gal"));
+            thing.print(F("P1: "));
+            if (clockPinIsDigitalInput()) {
+                thing.print(F("I ("));
+                if (getInputState(0)) {
+                    thing.print(F("HIGH"));
+                } else {
+                    thing.print(F("LOW"));
+                }
+            } else {
+                thing.print(F("CLK ("));
+                thing.print(getClockFrequency());
+            }
+            thing.println(F(")"));
+            for (int i = 1; i < 9; ++i) {
+                thing.print(F("P"));
+                thing.print(i + 1);
+                thing.print(F(": I ("));
+                if (getInputState(i)) {
+                    thing.println(F("HIGH)"));
+                } else {
+                    thing.println(F("LOW)"));
+                }
+            }
+            thing.println(F("P10: GND"));
+            thing.print(F("P11: I/~{OE} ("));
+            if (getInputState(9)) {
+                thing.println(F("HIGH)"));
+            } else {
+                thing.println(F("LOW)"));
+            }
+            auto sample = readOutputs();
+            for (int i = 10, j = 0; i < 18; ++i, ++j) {
+                thing.print(F("P"));
+                thing.print((i + 2));
+                if (isInputPin(i)) {
+                    if (getInputState(i)) {
+                        thing.println(F(": I (LOW)"));
+                    } else {
+                        thing.println(F(": I (HIGH)"));
+                    }
+                } else {
+                    auto bit = sample & (1 << j);
+                    thing.print(F(": O ("));
+                    thing.print(bit ? F("HIGH") : F("LOW"));
+                    thing.println(F(")"));
+                }
+            }
+
+            thing.println(F("P20: VCC"));
+        }
         bool isOutputPin(int pin) const noexcept;
         bool isInputPin(int pin) const noexcept;
         void displayRegisters() const noexcept;
@@ -446,59 +499,6 @@ GALInterface::begin() noexcept {
     configureIOPins(0); // all will be _outputs_
     // setup the MCP23S17 as needed
 }
-void 
-GALInterface::printPinStates() const noexcept {
-    Serial.println(F("Pin states as seen from the perspective of the gal"));
-    Serial.print(F("P1: "));
-    if (clockPinIsDigitalInput()) {
-        Serial.print(F("I ("));
-        if (getInputState(0)) {
-            Serial.print(F("HIGH"));
-        } else {
-            Serial.print(F("LOW"));
-        }
-    } else {
-        Serial.print(F("CLK ("));
-        Serial.print(getClockFrequency());
-    }
-    Serial.println(F(")"));
-    for (int i = 1; i < 9; ++i) {
-        Serial.print(F("P"));
-        Serial.print(i + 1);
-        Serial.print(F(": I ("));
-        if (getInputState(i)) {
-            Serial.println(F("HIGH)"));
-        } else {
-            Serial.println(F("LOW)"));
-        }
-    }
-    Serial.println(F("P10: GND"));
-    Serial.print(F("P11: I/~{OE} ("));
-    if (getInputState(9)) {
-        Serial.println(F("HIGH)"));
-    } else {
-        Serial.println(F("LOW)"));
-    }
-    auto sample = readOutputs();
-    for (int i = 10, j = 0; i < 18; ++i, ++j) {
-        Serial.print(F("P"));
-        Serial.print((i + 2));
-        if (isInputPin(i)) {
-            if (getInputState(i)) {
-                Serial.println(F(": I (LOW)"));
-            } else {
-                Serial.println(F(": I (HIGH)"));
-            }
-        } else {
-            auto bit = sample & (1 << j);
-            Serial.print(F(": O ("));
-            Serial.print(bit ? F("HIGH") : F("LOW"));
-            Serial.println(F(")"));
-        }
-    }
-
-    Serial.println(F("P20: VCC"));
-}
 GALInterface iface(CS, 
         I9, 
         I1_CLK, 
@@ -592,9 +592,38 @@ setup() {
         // load the configuration from the SDCard to set everything up?
     }
     Serial.println();
+    // generate a random maze
 }
+void forwardClear(int x, int y, int count) noexcept {
+    tft.setTextColor(ILI9341_BLACK);
+    for (int i = 0; i < count; ++i) {
+        tft.print(static_cast<char>(0xDA));
+    }
+    tft.setTextColor(ILI9341_WHITE);
+    
+    tft.setCursor(x, y);
+}
+
 void loop() {
-    // in here we want to describe the actions to perform
+    tft.setCursor(0,0);
+    tft.fillScreen(ILI9341_BLACK);
+    iface.printPinStates(Serial);
+    iface.printPinStates(tft);
+#if 0
+    tft.print(F("Inputs: 0x")); 
+    forwardClear(4);
+    tft.println(0xFDED, HEX);
+    tft.print(F("Outputs: 0x")); 
+    forwardClear(2);
+    tft.println(0xFF, HEX);
+    tft.print(F("CLK: ")); 
+    forwardClear(1);
+    tft.println(1);
+    tft.print(F("OE: ")); 
+    forwardClear(1);
+    tft.println(0);
+#endif
+    delay(1000);
 }
 
 
@@ -661,4 +690,657 @@ setupDisplay() noexcept {
     test4.fillRect(tft);
     test5.fillRect(tft);
     test6.fillRect(tft);
+    delay(3000);
+    tft.fillScreen(ILI9341_BLACK);
+}
+
+
+class Word {
+    public:
+        explicit Word(const String& name) : name_(name) { }
+        virtual ~Word() = default;
+        [[nodiscard]] virtual bool matches(const String& name) const noexcept { return name == name_; }
+        virtual bool invoke(const String& match) noexcept = 0;
+        const String& getName() const noexcept { return name_; }
+    private:
+        String name_;
+};
+class LambdaWord : public Word {
+    public:
+        using Parent = Word;
+        using Function = bool (*)(const String&);
+        explicit LambdaWord(const String& name, Function theFunction) : Parent(name), func_(theFunction)  { }
+        ~LambdaWord() override = default;
+        bool invoke(const String& match) noexcept override {
+            return func_(match);
+        }
+    private:
+        Function func_;
+};
+extern Word* lookupTable[256];
+bool
+listWords(const String&) noexcept {
+    Serial.println(F("Registered Words:"));
+    int count = 0;
+    for (auto* word : lookupTable) {
+        if (word) {
+            Serial.print(F("- "));
+            Serial.println(word->getName());
+            ++count;
+        }
+    }
+    Serial.println();
+    Serial.print(F("Found "));
+    Serial.print(count);
+    Serial.println(F(" words in dictionary"));
+    Serial.println();
+    return true;
+}
+bool
+displayPinout(const String&) noexcept {
+    iface.printPinStates(Serial);
+    return true;
+}
+void 
+GALInterface::displayRegisters() const noexcept {
+    Serial.println(F("GAL Interface Registers"));
+    Serial.print(F("IO Pins Configuration: 0b"));
+    Serial.println(static_cast<byte>(~ioPinConfiguration_), BIN);
+    Serial.print(F("Input values: 0b"));
+    Serial.println(inputPinState_.getMaskedState(), BIN);
+}
+bool
+displayRegisters(const String&) noexcept {
+    iface.displayRegisters();
+    return true;
+}
+
+
+Word* findWord(const String& word) noexcept {
+    for (auto* theWord: lookupTable) {
+        if (theWord && theWord->matches(word)) {
+            return theWord;
+        }
+    }
+    return nullptr;
+}
+enum class ErrorCodes {
+    None,
+    GeneralFailure,
+    UnknownWord,
+    BadNumberConvert,
+    Unimplemented,
+    StackFull,
+    StackEmpty,
+    NotEnoughStackElements,
+    DivideByZero,
+};
+extern String inputString;
+extern bool stringComplete;
+extern unsigned int position;
+extern ErrorCodes errorMessage;
+void
+read() {
+    while (Serial.available()) {
+        char inChar = static_cast<char>(Serial.read());
+        inputString += inChar;
+        Serial.print(inChar);
+        if (inChar == '\n') {
+            stringComplete = true;
+        } 
+    }
+}
+bool
+eval(const String& word) noexcept {
+    if (word.length() == 0) {
+        return true;
+    } else {
+        if (auto target = findWord(word); target) {
+            return target->invoke(word);
+        } else {
+            errorMessage = ErrorCodes::GeneralFailure;
+            return false;
+        }
+    }
+}
+struct TreatAsBoolean { };
+bool pushItemOntoStack(int32_t value) noexcept;
+bool pushItemOntoStack(bool value, TreatAsBoolean) noexcept { return pushItemOntoStack(value ? 0xFFFF'FFFF : 0); }
+template<int32_t constant>
+bool pushItemOntoStack(const String&) noexcept { 
+    return pushItemOntoStack(constant);
+}
+bool popItemOffStack(int32_t& item) noexcept;
+bool dropTopOfStack() noexcept;
+bool dropTopOfStack(const String&) noexcept { return dropTopOfStack(); }
+bool stackEmpty() noexcept;
+bool stackFull() noexcept;
+void clearStack() noexcept;
+void clearState() noexcept;
+uint32_t stackCapacity() noexcept;
+uint32_t numberOfItemsOnStack() noexcept;
+void handleError(bool errorState) noexcept;
+bool
+handleError(bool state, bool stillEvaluating) noexcept {
+    // okay so an error happened during evaluation, so we need to clean up
+    // and start again
+    switch (errorMessage) {
+        case ErrorCodes::None: 
+            break;
+        case ErrorCodes::BadNumberConvert: 
+            Serial.println(F("bad numeric conversion")); 
+            break;
+        case ErrorCodes::DivideByZero: 
+            Serial.println(F("divide by zero")); 
+            break;
+        case ErrorCodes::NotEnoughStackElements:
+            Serial.println(F("stack underflow"));
+            break;
+        case ErrorCodes::StackEmpty:
+            Serial.println(F("stack empty"));
+            break;
+        case ErrorCodes::StackFull:
+            Serial.println(F("stack full"));
+            break;
+        case ErrorCodes::Unimplemented:
+            Serial.println(F("unimplemented"));
+            break;
+        case ErrorCodes::UnknownWord:
+            Serial.println(F("unknown word"));
+            break;
+        default: 
+            Serial.println(F("some error happened")); 
+            break;
+    }
+    if (!stillEvaluating || !state) {
+        clearState();
+    }
+    if (!state) {
+        clearStack();
+    }
+    return state;
+}
+void
+clearState() {
+    errorMessage = ErrorCodes::None; 
+    inputString = "";
+    stringComplete = false;
+    position = 0;
+}
+
+void
+eval() noexcept {
+    if (stringComplete) {
+        stringComplete = false;
+        String subWord = "";
+        for (position = 0; position < inputString.length(); ) {
+            switch (auto c = inputString[position]; c) {
+                case ' ':
+                case '\t':
+                case '\n':
+                    // advance position ahead of time in this case
+                    ++position;
+                    if (!handleError(eval(subWord), true)) {
+                        return;
+                    } else {
+                        subWord = "";
+                    }
+                    break;
+                case '\r':
+                    // carriage returns should be ignored
+                    ++position;
+                    break;
+                default:
+                    subWord += c;
+                    ++position;
+                    break;
+            }
+        }
+        if (handleError(eval(subWord), false)) {
+            // defer printing out ok until we are done
+            Serial.println(F("\tok"));
+        }
+    } 
+}
+
+
+#ifdef ARDUINO_AVR_UNO
+#if __cplusplus >= 201402L
+void operator delete(void* ptr, size_t) {
+    ::operator delete(ptr);
+}
+
+void operator delete[](void* ptr, size_t) {
+    ::operator delete(ptr);
+}
+#endif 
+#endif
+
+bool
+setClkFrequency(const String&) noexcept {
+    errorMessage = ErrorCodes::Unimplemented;
+    return false;
+}
+class InvokeOnPrefixMatchWord : public Word {
+    public:
+        InvokeOnPrefixMatchWord(const String& name, const String& prefix) : Word(name), prefix_(prefix) { }
+        ~InvokeOnPrefixMatchWord() override = default;
+        bool matches(const String& message) const noexcept override;
+        bool invoke(const String& match) noexcept override;
+    protected:
+        virtual bool invoke0(const String& substringMatch) noexcept = 0;
+    private:
+        String prefix_;
+};
+bool
+InvokeOnPrefixMatchWord::matches(const String& word) const noexcept {
+    if (prefix_.length() == 0) {
+        return true;
+    } else {
+        return word.startsWith(prefix_);
+    }
+}
+bool
+InvokeOnPrefixMatchWord::invoke(const String& match) noexcept {
+    // if we got here then it is safe to strip the prefix off
+    auto substring = match.substring(prefix_.length());
+    substring.trim();
+    return invoke0(substring);
+}
+class ParseNumberAndPushOntoStack : public InvokeOnPrefixMatchWord {
+    public:
+        ParseNumberAndPushOntoStack(const String& name, const String& prefix) : InvokeOnPrefixMatchWord(name, prefix) { }
+        ~ParseNumberAndPushOntoStack() override = default;
+    protected:
+        bool invoke0(const String& substringMatch) noexcept override;
+        virtual bool parse(const String& theValue, int32_t& number) noexcept = 0;
+};
+
+bool
+ParseNumberAndPushOntoStack::invoke0(const String& match) noexcept {
+    int32_t value = 0;
+    if (parse(match, value)) {
+        return pushItemOntoStack(value);
+    } else {
+        return false;
+    }
+}
+
+class NumericBaseCapture : public ParseNumberAndPushOntoStack {
+    public:
+        NumericBaseCapture(const String& name, const String& prefix, int numericBase) : ParseNumberAndPushOntoStack(name, prefix), base_(numericBase) { }
+    protected:
+        bool parse(const String& theValue, int32_t& number) noexcept override;
+    private:
+        int base_;
+
+};
+bool
+NumericBaseCapture::parse(const String& theValue, int32_t& result) noexcept {
+    char* firstBad = nullptr;
+    auto theStr = theValue.c_str();
+    auto number = strtol(theStr, &firstBad, base_); 
+    if (firstBad != nullptr) {
+        // okay so we may have got a bad conversion
+        // it could also be that we were successful but strtoul views the
+        // character beyond the end as "bad"
+        // 
+        // So convert the pointer addresses and do some calculations to see if
+        // we were actually unsuccessful
+        auto strStart = reinterpret_cast<uint32_t>(theStr);
+        auto badEnd = reinterpret_cast<uint32_t>(firstBad);
+        if ((strStart + theValue.length()) == badEnd) {
+            // we were actually successful! So assign result the number we got
+            result = number;
+            return true;
+        } else if (strStart == badEnd) {
+            errorMessage = ErrorCodes::UnknownWord;
+            return false;
+        } else {
+            errorMessage = ErrorCodes::BadNumberConvert;
+            return false;
+        }
+    } else {
+        // okay so we were successful
+        result = number;
+        return true;
+    }
+}
+
+uint32_t lookupTableCount = 0;
+bool
+defineWord(Word* theWord) noexcept {
+    if (theWord && (lookupTableCount < 256)) {
+        lookupTable[lookupTableCount] = theWord;
+        ++lookupTableCount;
+        return true;
+    } 
+    return false;
+}
+bool
+defineWord(const String& name, LambdaWord::Function func) noexcept {
+    return defineWord(new LambdaWord(name, func));
+}
+template<typename T, typename ... Args>
+bool
+defineSpecialWord(const String& name, Args&& ... args) noexcept {
+    return defineWord(new T(name, args...));
+    // in here we want to describe the actions to perform
+}
+bool popAndPrintStackTop(const String&) noexcept;
+bool printStackContents(const String&) noexcept;
+bool addTwoNumbers(const String&) noexcept;
+bool subtractTwoNumbers(const String&) noexcept;
+bool multiplyTwoNumbers(const String&) noexcept;
+bool divideTwoNumbers(const String&) noexcept;
+bool moduloTwoNumbers(const String&) noexcept;
+bool twoNumbersEqual(const String&) noexcept;
+bool twoNumbersNotEqual(const String&) noexcept;
+bool topGreaterThanLower(const String&) noexcept;
+bool topLessThanLower(const String&) noexcept;
+bool topGreaterThanOrEqualLower(const String&) noexcept;
+bool topLessThanOrEqualLower(const String&) noexcept;
+bool duplicateTop(const String&) noexcept;
+bool setIOPinMode(const String&) noexcept;
+void
+setupLookupTable() noexcept {
+    defineWord(F("words"), listWords);
+    defineWord(F("pins"), displayPinout);
+    defineWord(F("status"), displayRegisters);
+    defineWord(F("set-clock-frequency"), setClkFrequency);
+    defineWord(F("drop"), dropTopOfStack);
+    defineWord(F("."), popAndPrintStackTop);
+    defineWord(F(".s"), printStackContents);
+    defineWord(F("+"), addTwoNumbers);
+    defineWord(F("-"), subtractTwoNumbers);
+    defineWord(F("*"), multiplyTwoNumbers);
+    defineWord(F("/"), divideTwoNumbers);
+    defineWord(F("%"), moduloTwoNumbers);
+    defineWord(F("dup"), duplicateTop);
+    defineWord(F("=="), twoNumbersEqual);
+    defineWord(F("!="), twoNumbersNotEqual);
+    defineWord(F(">"), topLessThanLower);
+    defineWord(F("<"), topGreaterThanLower);
+    defineWord(F("<="), topLessThanOrEqualLower);
+    defineWord(F(">="), topGreaterThanOrEqualLower);
+    defineWord(F("io-pin-mode"), setIOPinMode);
+#define X(str, target) defineWord(F(str) , pushItemOntoStack<target>)
+    X("input", INPUT);
+    X("output", OUTPUT);
+    //X("input-pullup", INPUT_PULLUP);
+    X("low", LOW);
+    X("high", HIGH);
+    X("true", 0xFFFF'FFFF);
+    X("false", 0);
+    X("P1", 0);
+    X("P2", 1);
+    X("P3", 2);
+    X("P4", 3);
+    X("P5", 4);
+    X("P6", 5);
+    X("P7", 6);
+    X("P8", 7);
+    X("P9", 8);
+    X("P11", 9);
+    X("P12", 10);
+    X("P13", 11);
+    X("P14", 12);
+    X("P15", 13);
+    X("P16", 14);
+    X("P17", 15);
+    X("P18", 16);
+    X("P19", 17);
+#undef X
+
+    defineSpecialWord<NumericBaseCapture>(F("binary-convert (prefix is 0b)"), F("0b"), 2);
+
+    // must come last
+    if (!defineSpecialWord<NumericBaseCapture>(F("fallback-capture (prefix is nothing)"), "", 0)) {
+        Serial.println(F("TOO MANY WORDS DEFINED! HALTING!!"));
+        while (true);
+    }
+}
+Word* lookupTable[256] = { 0 };
+
+String inputString = "";         // a String to hold incoming data
+bool stringComplete = false;  // whether the string is complete
+unsigned int position = 0;
+ErrorCodes errorMessage = ErrorCodes::None;
+constexpr auto numStackElements = 16;
+uint8_t stackPosition = numStackElements;
+uint32_t theStack[numStackElements];
+
+void 
+clearStack() noexcept {
+    stackPosition = numStackElements;
+    for (int i = 0;i < numStackElements; ++i) {
+        theStack[i] = 0;
+    }
+}
+
+
+bool 
+pushItemOntoStack(int32_t value) noexcept {
+    if (stackFull()) {
+        errorMessage = ErrorCodes::StackFull;
+        return false;
+    } else {
+        theStack[--stackPosition] = value;
+        return true;
+    }
+}
+bool 
+popItemOffStack(int32_t& item) noexcept {
+    if (stackEmpty()) {
+        errorMessage = ErrorCodes::StackEmpty;
+        return false;
+    } else {
+        item = theStack[stackPosition];
+        ++stackPosition;
+        return true;
+    }
+}
+bool 
+stackEmpty() noexcept {
+    return stackPosition == numStackElements;
+}
+
+bool 
+stackFull() noexcept {
+    return stackPosition == 0;
+}
+
+uint32_t
+stackCapacity() noexcept {
+    return numStackElements;
+}
+
+uint32_t
+numberOfItemsOnStack() noexcept {
+    return stackCapacity() - stackPosition;
+}
+bool
+dropTopOfStack() noexcept {
+    int32_t temporary = 0;
+    return popItemOffStack(temporary);
+}
+bool
+popAndPrintStackTop(const String&) noexcept {
+    int32_t value = 0;
+    if (popItemOffStack(value)) {
+        Serial.print(value);
+        return true;
+    } else {
+        return false;
+    }
+}
+bool
+printStackContents(const String&) noexcept {
+    if (!stackEmpty()) {
+        for (int i = numStackElements - 1; i >= stackPosition; --i) {
+            Serial.print(theStack[i]);
+            Serial.print(F(" "));
+        }
+    }
+    Serial.println();
+    return true;
+}
+
+bool 
+addTwoNumbers(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = ErrorCodes::NotEnoughStackElements;
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    return pushItemOntoStack(lower + top);
+}
+bool 
+subtractTwoNumbers(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = ErrorCodes::NotEnoughStackElements;
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    return pushItemOntoStack(lower - top);
+}
+bool 
+multiplyTwoNumbers(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = ErrorCodes::NotEnoughStackElements;
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    return pushItemOntoStack(lower * top);
+}
+
+bool 
+divideTwoNumbers(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = ErrorCodes::NotEnoughStackElements;
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    if (top == 0) {
+        errorMessage = ErrorCodes::DivideByZero;
+        return false;
+    }
+    return pushItemOntoStack(lower / top);
+}
+
+bool 
+moduloTwoNumbers(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = ErrorCodes::NotEnoughStackElements;
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    if (top == 0) {
+        errorMessage = ErrorCodes::DivideByZero;
+        return false;
+    }
+    return pushItemOntoStack(lower % top);
+}
+
+bool 
+twoNumbersEqual(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = ErrorCodes::NotEnoughStackElements;
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    return pushItemOntoStack(lower == top, TreatAsBoolean{});
+}
+bool 
+twoNumbersNotEqual(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = ErrorCodes::NotEnoughStackElements;
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    return pushItemOntoStack(lower != top, TreatAsBoolean{});
+}
+
+bool 
+topGreaterThanLower(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = ErrorCodes::NotEnoughStackElements;
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    return pushItemOntoStack(lower < top, TreatAsBoolean{});
+}
+
+bool 
+topGreaterThanOrEqualLower(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = ErrorCodes::NotEnoughStackElements;
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    return pushItemOntoStack(lower <= top, TreatAsBoolean{});
+}
+
+bool 
+topLessThanLower(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = ErrorCodes::NotEnoughStackElements;
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    return pushItemOntoStack(lower > top, TreatAsBoolean{});
+}
+bool 
+topLessThanOrEqualLower(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = ErrorCodes::NotEnoughStackElements;
+        return false;
+    }
+    int32_t top, lower;
+    popItemOffStack(top);
+    popItemOffStack(lower);
+    return pushItemOntoStack(lower >= top, TreatAsBoolean{});
+}
+bool 
+duplicateTop(const String&) noexcept {
+    int32_t result = 0;
+    if (popItemOffStack(result)) {
+        return pushItemOntoStack(result) && pushItemOntoStack(result);
+    } else {
+        return false;
+    }
+}
+
+bool
+setIOPinMode(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = ErrorCodes::NotEnoughStackElements;
+        return false;
+    }
+    int32_t mode, targetPin;
+    popItemOffStack(mode);
+    // assume that targetPin is actually subtracted by one
+    popItemOffStack(targetPin);
+    iface.configureIOPin(targetPin, mode);
+    return true;
 }
