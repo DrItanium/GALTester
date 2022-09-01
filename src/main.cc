@@ -209,59 +209,66 @@ class GALInterface {
         constexpr auto getClockFrequency() const noexcept { return clockFrequency_; }
         void setInput(int pin, bool state) noexcept;
         bool getInputState(int pin) const noexcept;
+    private:
+        template<typename T>
+        void
+        printSingleHighLow(T& thing, bool cond) const noexcept {
+            if (cond) {
+                thing.print(F("HIGH"));
+            } else {
+                thing.print(F("LOW"));
+            }
+        }
+        template<typename T>
+        void
+        printSingleHighLowInput(T& thing, int i) const noexcept {
+            printSingleHighLow(thing, getInputState(i));
+        }
+        template<typename T>
+        void
+        printPinId(T& thing, int index) const noexcept {
+            thing.print(F("P"));
+            thing.print(index);
+            thing.print(F(": "));
+        }
+    public:
         template<typename T>
         void 
         printPinStates(T& thing) const noexcept {
             thing.println(F("Pin states as seen from the perspective of the gal"));
-            thing.print(F("P1: "));
+            printPinId(thing, 1);
             if (clockPinIsDigitalInput()) {
                 thing.print(F("I ("));
-                if (getInputState(0)) {
-                    thing.print(F("HIGH"));
-                } else {
-                    thing.print(F("LOW"));
-                }
+                printSingleHighLowInput(thing, 0);
             } else {
                 thing.print(F("CLK ("));
                 thing.print(getClockFrequency());
             }
             thing.println(F(")"));
             for (int i = 1; i < 9; ++i) {
-                thing.print(F("P"));
-                thing.print(i + 1);
-                thing.print(F(": I ("));
-                if (getInputState(i)) {
-                    thing.println(F("HIGH)"));
-                } else {
-                    thing.println(F("LOW)"));
-                }
+                printPinId(thing, i + 1);
+                thing.print(F("I ("));
+                printSingleHighLowInput(thing, i);
+                thing.println(F(")"));
             }
-            thing.println(F("P10: GND"));
             thing.print(F("P11: I/~{OE} ("));
-            if (getInputState(9)) {
-                thing.println(F("HIGH)"));
-            } else {
-                thing.println(F("LOW)"));
-            }
+            printSingleHighLowInput(thing, 9);
+            thing.println(F(")"));
+
             auto sample = readOutputs();
             for (int i = 10, j = 0; i < 18; ++i, ++j) {
-                thing.print(F("P"));
-                thing.print((i + 2));
+                printPinId(thing, i + 2);
                 if (isInputPin(i)) {
-                    if (getInputState(i)) {
-                        thing.println(F(": I (LOW)"));
-                    } else {
-                        thing.println(F(": I (HIGH)"));
-                    }
+                    thing.print(F("I ("));
+                    printSingleHighLowInput(thing, i);
                 } else {
                     auto bit = sample & (1 << j);
-                    thing.print(F(": O ("));
-                    thing.print(bit ? F("HIGH") : F("LOW"));
-                    thing.println(F(")"));
+                    thing.print(F("O ("));
+                    printSingleHighLow(thing, bit);
                 }
+                thing.println(F(")"));
             }
 
-            thing.println(F("P20: VCC"));
         }
         bool isOutputPin(int pin) const noexcept;
         bool isInputPin(int pin) const noexcept;
@@ -797,6 +804,7 @@ template<int32_t constant>
 bool pushItemOntoStack(const String&) noexcept { 
     return pushItemOntoStack(constant);
 }
+bool expectedNumberOfItemsOnStack(byte numberOfItems) noexcept;
 bool popItemOffStack(int32_t& item) noexcept;
 bool dropTopOfStack() noexcept;
 bool dropTopOfStack(const String&) noexcept { return dropTopOfStack(); }
@@ -1033,10 +1041,19 @@ bool setInputPinValue(const String&) noexcept;
 void
 setupLookupTable() noexcept {
     defineWord(F("words"), listWords);
-    defineWord(F("pins"), displayPinout);
-    defineWord(F("status"), displayRegisters);
-    defineWord(F("set-clock-frequency"), setClkFrequency);
     defineWord(F("drop"), dropTopOfStack);
+    defineWord(F("dup"), duplicateTop);
+    defineWord(F("swap"), [](const String& str) noexcept {
+                if (expectedNumberOfItemsOnStack(2)) {
+                    int32_t top, lower;
+                    popItemOffStack(top);
+                    popItemOffStack(lower);
+                    pushItemOntoStack(top);
+                    pushItemOntoStack(lower);
+                    return true;
+                }
+                return false;
+            });
     defineWord(F("."), popAndPrintStackTop);
     defineWord(F(".s"), printStackContents);
     defineWord(F("+"), addTwoNumbers);
@@ -1044,15 +1061,24 @@ setupLookupTable() noexcept {
     defineWord(F("*"), multiplyTwoNumbers);
     defineWord(F("/"), divideTwoNumbers);
     defineWord(F("%"), moduloTwoNumbers);
-    defineWord(F("dup"), duplicateTop);
     defineWord(F("=="), twoNumbersEqual);
     defineWord(F("!="), twoNumbersNotEqual);
     defineWord(F(">"), topLessThanLower);
     defineWord(F("<"), topGreaterThanLower);
     defineWord(F("<="), topLessThanOrEqualLower);
     defineWord(F(">="), topGreaterThanOrEqualLower);
+    defineWord(F("1+"), [](const String& str) { return pushItemOntoStack(1) && addTwoNumbers(str); });
+    defineWord(F("1-"), [](const String& str) { return pushItemOntoStack(1) && subtractTwoNumbers(str); });
+    defineWord(F("2*"), [](const String& str) { return pushItemOntoStack(2) && multiplyTwoNumbers(str); });
+    defineWord(F("2/"), [](const String& str) { return pushItemOntoStack(2) && divideTwoNumbers(str); });
+    defineWord(F("==0"), [](const String& str) { return pushItemOntoStack(0) && twoNumbersEqual(str); });
+    defineWord(F("!=0"), [](const String& str) { return pushItemOntoStack(0) && twoNumbersNotEqual(str); });
+    // pin manipulators
     defineWord(F("io-pin-mode"), setIOPinMode);
     defineWord(F("set-input"), setInputPinValue);
+    defineWord(F("pins"), displayPinout);
+    defineWord(F("status"), displayRegisters);
+    defineWord(F("set-clock-frequency"), setClkFrequency);
 #define X(str, target) defineWord(F(str) , pushItemOntoStack<target>)
     X("input", INPUT);
     X("output", OUTPUT);
@@ -1174,141 +1200,82 @@ printStackContents(const String&) noexcept {
     Serial.println();
     return true;
 }
-
+template<typename T>
+bool
+performBinaryOperation(T function, bool topMustNotBeZero = false) noexcept {
+    if (expectedNumberOfItemsOnStack(2)) {
+        int32_t top, lower;
+        popItemOffStack(top);
+        popItemOffStack(lower);
+        if (topMustNotBeZero) {
+            if (top == 0) {
+                errorMessage = ErrorCodes::DivideByZero;
+                return false;
+            }
+        }
+        return pushItemOntoStack(function(lower, top));
+    }
+    return false;
+}
 bool 
 addTwoNumbers(const String&) noexcept {
-    if (numberOfItemsOnStack() < 2) {
-        errorMessage = ErrorCodes::NotEnoughStackElements;
-        return false;
-    }
-    int32_t top, lower;
-    popItemOffStack(top);
-    popItemOffStack(lower);
-    return pushItemOntoStack(lower + top);
+    return performBinaryOperation([](int32_t a, int32_t b) { return a + b; });
 }
 bool 
 subtractTwoNumbers(const String&) noexcept {
-    if (numberOfItemsOnStack() < 2) {
-        errorMessage = ErrorCodes::NotEnoughStackElements;
-        return false;
-    }
-    int32_t top, lower;
-    popItemOffStack(top);
-    popItemOffStack(lower);
-    return pushItemOntoStack(lower - top);
+    return performBinaryOperation([](int32_t a, int32_t b) { return a - b; });
 }
 bool 
 multiplyTwoNumbers(const String&) noexcept {
-    if (numberOfItemsOnStack() < 2) {
-        errorMessage = ErrorCodes::NotEnoughStackElements;
-        return false;
-    }
-    int32_t top, lower;
-    popItemOffStack(top);
-    popItemOffStack(lower);
-    return pushItemOntoStack(lower * top);
+    return performBinaryOperation([](int32_t a, int32_t b) { return a * b; });
 }
 
 bool 
 divideTwoNumbers(const String&) noexcept {
-    if (numberOfItemsOnStack() < 2) {
-        errorMessage = ErrorCodes::NotEnoughStackElements;
-        return false;
-    }
-    int32_t top, lower;
-    popItemOffStack(top);
-    popItemOffStack(lower);
-    if (top == 0) {
-        errorMessage = ErrorCodes::DivideByZero;
-        return false;
-    }
-    return pushItemOntoStack(lower / top);
+    return performBinaryOperation([](int32_t a, int32_t b) { return a / b; }, true);
 }
 
 bool 
 moduloTwoNumbers(const String&) noexcept {
-    if (numberOfItemsOnStack() < 2) {
-        errorMessage = ErrorCodes::NotEnoughStackElements;
-        return false;
-    }
-    int32_t top, lower;
-    popItemOffStack(top);
-    popItemOffStack(lower);
-    if (top == 0) {
-        errorMessage = ErrorCodes::DivideByZero;
-        return false;
-    }
-    return pushItemOntoStack(lower % top);
+    return performBinaryOperation([](int32_t a, int32_t b) { return a % b; }, true);
 }
-
+template<typename T>
+bool
+binaryBooleanOperation(T fn) noexcept {
+    if (expectedNumberOfItemsOnStack(2)) {
+        int32_t top, lower;
+        popItemOffStack(top);
+        popItemOffStack(lower);
+        return pushItemOntoStack(fn(lower, top), TreatAsBoolean{});
+    }
+    return false;
+}
 bool 
 twoNumbersEqual(const String&) noexcept {
-    if (numberOfItemsOnStack() < 2) {
-        errorMessage = ErrorCodes::NotEnoughStackElements;
-        return false;
-    }
-    int32_t top, lower;
-    popItemOffStack(top);
-    popItemOffStack(lower);
-    return pushItemOntoStack(lower == top, TreatAsBoolean{});
+    return binaryBooleanOperation([](int32_t a, int32_t b) { return a == b; });
 }
 bool 
 twoNumbersNotEqual(const String&) noexcept {
-    if (numberOfItemsOnStack() < 2) {
-        errorMessage = ErrorCodes::NotEnoughStackElements;
-        return false;
-    }
-    int32_t top, lower;
-    popItemOffStack(top);
-    popItemOffStack(lower);
-    return pushItemOntoStack(lower != top, TreatAsBoolean{});
+    return binaryBooleanOperation([](int32_t a, int32_t b) { return a != b; });
 }
 
 bool 
 topGreaterThanLower(const String&) noexcept {
-    if (numberOfItemsOnStack() < 2) {
-        errorMessage = ErrorCodes::NotEnoughStackElements;
-        return false;
-    }
-    int32_t top, lower;
-    popItemOffStack(top);
-    popItemOffStack(lower);
-    return pushItemOntoStack(lower < top, TreatAsBoolean{});
+    return binaryBooleanOperation([](int32_t a, int32_t b) { return a < b; });
 }
 
 bool 
 topGreaterThanOrEqualLower(const String&) noexcept {
-    if (numberOfItemsOnStack() < 2) {
-        errorMessage = ErrorCodes::NotEnoughStackElements;
-        return false;
-    }
-    int32_t top, lower;
-    popItemOffStack(top);
-    popItemOffStack(lower);
-    return pushItemOntoStack(lower <= top, TreatAsBoolean{});
+    return binaryBooleanOperation([](int32_t a, int32_t b) { return a <= b; });
 }
 
 bool 
 topLessThanLower(const String&) noexcept {
-    if (numberOfItemsOnStack() < 2) {
-        errorMessage = ErrorCodes::NotEnoughStackElements;
-        return false;
-    }
-    int32_t top, lower;
-    popItemOffStack(top);
-    popItemOffStack(lower);
-    return pushItemOntoStack(lower > top, TreatAsBoolean{});
+    return binaryBooleanOperation([](int32_t a, int32_t b) { return a > b; });
 }
 bool 
 topLessThanOrEqualLower(const String&) noexcept {
-    if (numberOfItemsOnStack() < 2) {
-        errorMessage = ErrorCodes::NotEnoughStackElements;
-        return false;
-    }
-    int32_t top, lower;
-    popItemOffStack(top);
-    popItemOffStack(lower);
-    return pushItemOntoStack(lower >= top, TreatAsBoolean{});
+    return binaryBooleanOperation([](int32_t a, int32_t b) { return a >= b; });
 }
 bool 
 duplicateTop(const String&) noexcept {
@@ -1335,13 +1302,20 @@ setIOPinMode(const String&) noexcept {
 }
 bool
 setInputPinValue(const String&) noexcept {
-    if (numberOfItemsOnStack() < 2) {
+    if (expectedNumberOfItemsOnStack(2)) {
+        int32_t value, targetPin;
+        popItemOffStack(value);
+        popItemOffStack(targetPin);
+        iface.setInput(targetPin, value != 0);
+        return true;
+    }
+    return false;
+}
+bool 
+expectedNumberOfItemsOnStack(byte numberOfItems) noexcept {
+    if (numberOfItemsOnStack() < numberOfItems) {
         errorMessage = ErrorCodes::NotEnoughStackElements;
         return false;
     }
-    int32_t value, targetPin;
-    popItemOffStack(value);
-    popItemOffStack(targetPin);
-    iface.setInput(targetPin, value != 0);
     return true;
 }
