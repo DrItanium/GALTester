@@ -711,7 +711,8 @@ class LambdaWord : public Word {
     private:
         Function func_;
 };
-extern Word* lookupTable[256];
+constexpr auto MaxNumberOfWords = 256;
+extern Word* lookupTable[MaxNumberOfWords];
 bool
 listWords(const String&) noexcept {
     Serial.println(F("Registered Words:"));
@@ -821,9 +822,11 @@ bool stackEmpty() noexcept;
 bool stackFull() noexcept;
 void clearStack() noexcept;
 void clearState() noexcept;
+bool swapTopTwoStackElements() noexcept;
 uint32_t stackCapacity() noexcept;
 uint32_t numberOfItemsOnStack() noexcept;
 void handleError(bool errorState) noexcept;
+bool duplicateTopOfStack() noexcept;
 bool
 handleError(bool state, bool stillEvaluating) noexcept {
     // okay so an error happened during evaluation, so we need to clean up
@@ -1014,7 +1017,7 @@ NumericBaseCapture::parse(const String& theValue, int32_t& result) noexcept {
 uint32_t lookupTableCount = 0;
 bool
 defineWord(Word* theWord) noexcept {
-    if (theWord && (lookupTableCount < 256)) {
+    if (theWord && (lookupTableCount < MaxNumberOfWords)) {
         lookupTable[lookupTableCount] = theWord;
         ++lookupTableCount;
         return true;
@@ -1038,6 +1041,10 @@ bool subtractTwoNumbers(const String&) noexcept;
 bool multiplyTwoNumbers(const String&) noexcept;
 bool divideTwoNumbers(const String&) noexcept;
 bool moduloTwoNumbers(const String&) noexcept;
+bool orTwoNumbers(const String&) noexcept;
+bool andTwoNumbers(const String&) noexcept;
+bool xorTwoNumbers(const String&) noexcept;
+bool depth(const String&) noexcept;
 bool twoNumbersEqual(const String&) noexcept;
 bool twoNumbersNotEqual(const String&) noexcept;
 bool topGreaterThanLower(const String&) noexcept;
@@ -1047,22 +1054,14 @@ bool topLessThanOrEqualLower(const String&) noexcept;
 bool duplicateTop(const String&) noexcept;
 bool setIOPinMode(const String&) noexcept;
 bool setInputPinValue(const String&) noexcept;
+bool swapStackElements(const String&) noexcept;
 void
 setupLookupTable() noexcept {
     defineWord(F("words"), listWords);
     defineWord(F("drop"), dropTopOfStack);
     defineWord(F("dup"), duplicateTop);
-    defineWord(F("swap"), [](const String& str) noexcept {
-                if (expectedNumberOfItemsOnStack(2)) {
-                    int32_t top, lower;
-                    popItemOffStack(top);
-                    popItemOffStack(lower);
-                    pushItemOntoStack(top);
-                    pushItemOntoStack(lower);
-                    return true;
-                }
-                return false;
-            });
+    defineWord(F("swap"), swapStackElements);
+    defineWord(F("depth"), depth);
     defineWord(F("rot"), 
             [](const String&) noexcept {
                 if (expectedNumberOfItemsOnStack(3)) {
@@ -1091,6 +1090,13 @@ setupLookupTable() noexcept {
                 } 
                 return false;
             });
+
+
+
+
+    defineWord(F("or"), orTwoNumbers);
+    defineWord(F("and"), andTwoNumbers);
+    defineWord(F("xor"), xorTwoNumbers);
     defineWord(F("."), popAndPrintStackTop);
     defineWord(F(".s"), printStackContents);
     defineWord(F("+"), addTwoNumbers);
@@ -1098,8 +1104,8 @@ setupLookupTable() noexcept {
     defineWord(F("*"), multiplyTwoNumbers);
     defineWord(F("/"), divideTwoNumbers);
     defineWord(F("%"), moduloTwoNumbers);
-    defineWord(F("=="), twoNumbersEqual);
-    defineWord(F("!="), twoNumbersNotEqual);
+    defineWord(F("="), twoNumbersEqual);
+    defineWord(F("<>"), twoNumbersNotEqual);
     defineWord(F(">"), topLessThanLower);
     defineWord(F("<"), topGreaterThanLower);
     defineWord(F("<="), topLessThanOrEqualLower);
@@ -1110,6 +1116,8 @@ setupLookupTable() noexcept {
     defineWord(F("2/"), [](const String& str) { return pushItemOntoStack(2) && divideTwoNumbers(str); });
     defineWord(F("0="), [](const String& str) { return pushItemOntoStack(0) && twoNumbersEqual(str); });
     defineWord(F("0<"), [](const String& str) { return pushItemOntoStack(0) && topGreaterThanLower(str); });
+    defineWord(F("0>"), [](const String& str) { return pushItemOntoStack(0) && topLessThanLower(str); });
+    defineWord(F("0<>"), [](const String& str) { return pushItemOntoStack(0) && twoNumbersNotEqual(str); });
     // pin manipulators
     defineWord(F("io-pin-mode"), setIOPinMode);
     defineWord(F("set-input"), setInputPinValue);
@@ -1152,13 +1160,13 @@ setupLookupTable() noexcept {
         while (true);
     }
 }
-Word* lookupTable[256] = { 0 };
+Word* lookupTable[MaxNumberOfWords] = { 0 };
 
 String inputString = "";         // a String to hold incoming data
 bool stringComplete = false;  // whether the string is complete
 unsigned int position = 0;
 ErrorCodes errorMessage = ErrorCodes::None;
-constexpr auto numStackElements = 16;
+constexpr auto numStackElements = 32;
 uint8_t stackPosition = numStackElements;
 uint32_t theStack[numStackElements];
 
@@ -1267,6 +1275,19 @@ multiplyTwoNumbers(const String&) noexcept {
     return performBinaryOperation([](int32_t a, int32_t b) { return a * b; });
 }
 
+bool
+orTwoNumbers(const String&) noexcept {
+    return performBinaryOperation([](int32_t a, int32_t b) { return a | b; });
+}
+bool
+andTwoNumbers(const String&) noexcept {
+    return performBinaryOperation([](int32_t a, int32_t b) { return a & b; });
+}
+bool
+xorTwoNumbers(const String&) noexcept {
+    return performBinaryOperation([](int32_t a, int32_t b) { return a ^ b; });
+}
+
 bool 
 divideTwoNumbers(const String&) noexcept {
     return performBinaryOperation([](int32_t a, int32_t b) { return a / b; }, true);
@@ -1316,12 +1337,7 @@ topLessThanOrEqualLower(const String&) noexcept {
 }
 bool 
 duplicateTop(const String&) noexcept {
-    int32_t result = 0;
-    if (popItemOffStack(result)) {
-        return pushItemOntoStack(result) && pushItemOntoStack(result);
-    } else {
-        return false;
-    }
+    return duplicateTopOfStack();
 }
 
 bool
@@ -1356,3 +1372,30 @@ expectedNumberOfItemsOnStack(byte numberOfItems) noexcept {
     }
     return true;
 }
+
+bool
+depth(const String&) noexcept {
+    return pushItemOntoStack(numberOfItemsOnStack());
+}
+bool 
+swapStackElements(const String&) noexcept {
+    return swapTopTwoStackElements();
+}
+
+bool 
+swapTopTwoStackElements() noexcept {
+    if (expectedNumberOfItemsOnStack(2)) {
+        auto top = theStack[stackPosition];
+        auto next = theStack[stackPosition + 1];
+        theStack[stackPosition] = next;
+        theStack[stackPosition + 1] = top;
+        return true;
+    }
+    return false;
+}
+
+bool
+duplicateTopOfStack() noexcept {
+    return expectedNumberOfItemsOnStack(1) && pushItemOntoStack(theStack[stackPosition]);
+}
+
