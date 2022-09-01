@@ -781,10 +781,13 @@ read() {
             if (inputString.length() > 0) {
                 inputString.remove(inputString.length() - 1, 1);
             }
+            Serial.print(inChar);
+            Serial.print(' ');
+            Serial.print(inChar);
         } else {
             inputString += inChar;
+            Serial.print(inChar);
         }
-        Serial.print(inChar);
         if (inChar == '\n') {
             stringComplete = true;
         } 
