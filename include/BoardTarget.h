@@ -25,9 +25,4 @@
 
 #ifndef GAL_TESTER_BOARD_TARGET_H__
 #define GAL_TESTER_BOARD_TARGET_H__
-#ifdef ARDUINO_AVR_UNO
-#define TARGET_BOARD_ARDUINO_UNO
-#else 
-#error "unknown board!"
-#endif
 #endif

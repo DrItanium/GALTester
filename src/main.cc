@@ -23,7 +23,6 @@
  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "BoardTarget.h"
 #include <Arduino.h>
 #include <SPI.h>
 #include <SD.h>
@@ -509,12 +508,13 @@ volatile bool sdEnabled = false;
 void setupDisplay() noexcept;
 void 
 setup() {
-    Serial.begin(115200);
+    Serial.begin(9600);
     Serial.println(F("GAL Testing Interface"));
     Serial.println(F("(C) 2022 Joshua Scoggins"));
     Serial.println(F("This is open source software! See LICENSE for details"));
     Serial.println();
     Serial.println(F("TFT Bringup"));
+    asm volatile ("nop");
     tft.begin();
     auto x = tft.readcommand8(ILI9341_RDMODE);
     Serial.print(F("Display Power Mode: 0x")); Serial.println(x, HEX);
@@ -559,23 +559,45 @@ setup() {
 void loop() {
     // in here we want to describe the actions to perform
 }
-
+class Area {
+    public:
+        constexpr Area(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) : x_(x), y_(y), width_(w), height_(h), color_(color) { }
+        [[nodiscard]] constexpr auto getX() const noexcept { return x_; }
+        [[nodiscard]] constexpr auto getY() const noexcept { return y_; }
+        [[nodiscard]] constexpr auto getWidth() const noexcept { return width_; }
+        [[nodiscard]] constexpr auto getHeight() const noexcept { return height_; }
+        [[nodiscard]] constexpr auto getColor() const noexcept { return color_; }
+        [[nodiscard]] bool intersects(int px, int py) const noexcept {
+            /// @todo width and height may need to be swapped etc
+            auto xEnd = x_ + width_;
+            auto yEnd = y_ + height_;
+            return (x_ <= px && px <= xEnd) &&
+                   (y_ <= py && py <= yEnd);
+        }
+        template<typename T>
+        void fillRect(T& tft) noexcept {
+            tft.fillRect( x_, y_, width_, height_, color_);
+        }
+    private:
+        int16_t x_, y_;
+        int16_t width_, height_;
+        uint16_t color_;
+};
 
 void
 setupDisplay() noexcept {
     Serial.println(F("Clearing Screen!"));
     tft.fillScreen(ILI9341_BLACK);
-    tft.fillRect(0, 0, tft.width() / 8, tft.height() / 8, ILI9341_YELLOW);
-    tft.fillRect(tft.width() / 8, 0, tft.width() / 8, tft.height() / 8, ILI9341_GREEN);
-    tft.fillRect((2 * tft.width()) / 8, 0, tft.width() / 8, tft.height() / 8, ILI9341_CYAN);
-    tft.fillRect((3 * tft.width()) / 8, 0, tft.width() / 8, tft.height() / 8, ILI9341_RED);
+    auto properWidth = tft.width() / 8;
+    auto properHeight = tft.height() / 8;
+    Area test(0,0, properWidth, properHeight, ILI9341_YELLOW);
+    Area test2(properWidth*1,0, properWidth, properHeight, ILI9341_GREEN);
+    Area test3(properWidth*2,0, properWidth, properHeight, ILI9341_CYAN);
+    Area test4(properWidth*3,0, properWidth, properHeight, ILI9341_RED);
+    test.fillRect(tft);
+    test2.fillRect(tft);
+    test3.fillRect(tft);
+    test4.fillRect(tft);
     tft.fillRect((4 * tft.width()) / 8, 0, tft.width() / 8, tft.height() / 8, ILI9341_BLUE);
     tft.fillRect((5 * tft.width()) / 8, 0, tft.width() / 8, tft.height() / 8, ILI9341_WHITE);
-}
-void 
-yield() {
-    if (ts.touched()) {
-        // figure out where we are touching and do some sort of operations
-    } else {
-    }
 }
