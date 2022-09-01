@@ -31,6 +31,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ILI9341.h>
 #include <Adafruit_FT6206.h>
+#include <ArduinoJson.hpp>
 constexpr auto CS = A0;
 constexpr auto RESET_IOEXP = A2;
 constexpr auto IOEXP_INT = 2;
@@ -504,6 +505,41 @@ GALInterface iface(CS,
         RESET_IOEXP, 
         IOEXP_INT, 
         IOExpanderAddress::GAL_16V8_Element);
+struct Configuration {
+    char name[128];
+    static constexpr auto NumTriggers = 18;
+    char configuration[NumTriggers];
+    const char* getName() const noexcept { return name; }
+    constexpr char getConfiguration(int index) const noexcept { return configuration[index % NumTriggers]; }
+    bool pinDisabled(int index) const noexcept { 
+        switch (getConfiguration(index)) {
+            case 'i':
+            case 'o':
+            case 'c':
+                return false;
+            default:
+                return true;
+        }
+    }
+    bool isClockPin(int index) const noexcept { return index == 0 && getConfiguration(index) == 'c'; }
+    bool isInputPin(int index) const noexcept { return getConfiguration(index) == 'i'; }
+    bool isOutputPin(int index) const noexcept { 
+        switch (index) {
+            case 10:
+            case 11:
+            case 12:
+            case 13:
+            case 14:
+            case 15:
+            case 16:
+            case 17:
+                return getConfiguration(index) == 'o';
+            default:
+                return false;
+        }
+    }
+    static Configuration get(const char* filename);
+};
 volatile bool sdEnabled = false;
 void setupDisplay() noexcept;
 void 
@@ -553,12 +589,35 @@ setup() {
     } else {
         sdEnabled = true;
         Serial.println(F("SD CARD AVAILABLE!"));
+        // load the configuration from the SDCard to set everything up?
     }
     Serial.println();
 }
 void loop() {
     // in here we want to describe the actions to perform
 }
+
+
+Configuration
+Configuration::get(const char* filename) {
+    File file = SD.open(filename);
+    ArduinoJson::StaticJsonDocument<512> doc;
+
+    auto error = deserializeJson(doc, file);
+    if (error) {
+        Serial.println(F("Failed to read file, using default configuration"));
+    }
+    Configuration cfg;
+    strlcpy(cfg.name, 
+            doc["name"] | "default", 
+            sizeof(cfg.name));
+    strlcpy(cfg.configuration, 
+            doc["cfg"] | "xxxxxxxxxxxxxxxxxx", 
+            sizeof(cfg.configuration));
+    file.close();
+    return cfg;
+}
+
 class Area {
     public:
         constexpr Area(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) : x_(x), y_(y), width_(w), height_(h), color_(color) { }
@@ -588,16 +647,18 @@ void
 setupDisplay() noexcept {
     Serial.println(F("Clearing Screen!"));
     tft.fillScreen(ILI9341_BLACK);
-    auto properWidth = tft.width() / 8;
+    auto properWidth = tft.width()/2;
     auto properHeight = tft.height() / 8;
-    Area test(0,0, properWidth, properHeight, ILI9341_YELLOW);
-    Area test2(properWidth*1,0, properWidth, properHeight, ILI9341_GREEN);
-    Area test3(properWidth*2,0, properWidth, properHeight, ILI9341_CYAN);
-    Area test4(properWidth*3,0, properWidth, properHeight, ILI9341_RED);
+    Area test(properWidth, 0, properWidth, properHeight, ILI9341_YELLOW);
+    Area test2(properWidth,properHeight*1, properWidth, properHeight, ILI9341_GREEN);
+    Area test3(properWidth,properHeight*2, properWidth, properHeight, ILI9341_CYAN);
+    Area test4(properWidth,properHeight*3, properWidth, properHeight, ILI9341_RED);
+    Area test5(properWidth,properHeight*4, properWidth, properHeight, ILI9341_BLUE);
+    Area test6(properWidth,properHeight*5, properWidth, properHeight, ILI9341_WHITE);
     test.fillRect(tft);
     test2.fillRect(tft);
     test3.fillRect(tft);
     test4.fillRect(tft);
-    tft.fillRect((4 * tft.width()) / 8, 0, tft.width() / 8, tft.height() / 8, ILI9341_BLUE);
-    tft.fillRect((5 * tft.width()) / 8, 0, tft.width() / 8, tft.height() / 8, ILI9341_WHITE);
+    test5.fillRect(tft);
+    test6.fillRect(tft);
 }
