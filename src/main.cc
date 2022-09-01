@@ -1029,6 +1029,7 @@ bool topGreaterThanOrEqualLower(const String&) noexcept;
 bool topLessThanOrEqualLower(const String&) noexcept;
 bool duplicateTop(const String&) noexcept;
 bool setIOPinMode(const String&) noexcept;
+bool setInputPinValue(const String&) noexcept;
 void
 setupLookupTable() noexcept {
     defineWord(F("words"), listWords);
@@ -1051,6 +1052,7 @@ setupLookupTable() noexcept {
     defineWord(F("<="), topLessThanOrEqualLower);
     defineWord(F(">="), topGreaterThanOrEqualLower);
     defineWord(F("io-pin-mode"), setIOPinMode);
+    defineWord(F("set-input"), setInputPinValue);
 #define X(str, target) defineWord(F(str) , pushItemOntoStack<target>)
     X("input", INPUT);
     X("output", OUTPUT);
@@ -1329,5 +1331,17 @@ setIOPinMode(const String&) noexcept {
     // assume that targetPin is actually subtracted by one
     popItemOffStack(targetPin);
     iface.configureIOPin(targetPin, mode);
+    return true;
+}
+bool
+setInputPinValue(const String&) noexcept {
+    if (numberOfItemsOnStack() < 2) {
+        errorMessage = ErrorCodes::NotEnoughStackElements;
+        return false;
+    }
+    int32_t value, targetPin;
+    popItemOffStack(value);
+    popItemOffStack(targetPin);
+    iface.setInput(targetPin, value != 0);
     return true;
 }
