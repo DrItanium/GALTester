@@ -1063,6 +1063,34 @@ setupLookupTable() noexcept {
                 }
                 return false;
             });
+    defineWord(F("rot"), 
+            [](const String&) noexcept {
+                if (expectedNumberOfItemsOnStack(3)) {
+                    int32_t x1, x2, x3;
+                    popItemOffStack(x3);
+                    popItemOffStack(x2);
+                    popItemOffStack(x1);
+                    pushItemOntoStack(x2);
+                    pushItemOntoStack(x3);
+                    pushItemOntoStack(x1);
+                    return true;
+                } 
+                return false;
+            });
+    defineWord(F("2drop"), [](const String& str) { return dropTopOfStack(str) && dropTopOfStack(str); });
+    defineWord(F("2dup"), [](const String&) {
+                if (expectedNumberOfItemsOnStack(2)) {
+                    int32_t top, lower;
+                    popItemOffStack(top);
+                    popItemOffStack(lower);
+                    pushItemOntoStack(lower);
+                    pushItemOntoStack(top);
+                    pushItemOntoStack(lower);
+                    pushItemOntoStack(top);
+                    return true;
+                } 
+                return false;
+            });
     defineWord(F("."), popAndPrintStackTop);
     defineWord(F(".s"), printStackContents);
     defineWord(F("+"), addTwoNumbers);
@@ -1080,8 +1108,8 @@ setupLookupTable() noexcept {
     defineWord(F("1-"), [](const String& str) { return pushItemOntoStack(1) && subtractTwoNumbers(str); });
     defineWord(F("2*"), [](const String& str) { return pushItemOntoStack(2) && multiplyTwoNumbers(str); });
     defineWord(F("2/"), [](const String& str) { return pushItemOntoStack(2) && divideTwoNumbers(str); });
-    defineWord(F("==0"), [](const String& str) { return pushItemOntoStack(0) && twoNumbersEqual(str); });
-    defineWord(F("!=0"), [](const String& str) { return pushItemOntoStack(0) && twoNumbersNotEqual(str); });
+    defineWord(F("0="), [](const String& str) { return pushItemOntoStack(0) && twoNumbersEqual(str); });
+    defineWord(F("0<"), [](const String& str) { return pushItemOntoStack(0) && topGreaterThanLower(str); });
     // pin manipulators
     defineWord(F("io-pin-mode"), setIOPinMode);
     defineWord(F("set-input"), setInputPinValue);
