@@ -56,6 +56,55 @@ enum class IOExpanderAddress : byte {
     OtherDevice5 = 0b1100,
     OtherDevice6 = 0b1110,
 };
+class PinDescription {
+    public:
+        enum ValidStates : byte {
+            None = 0,
+            Input = _BV(1),
+            Output = _BV(2),
+            Clock = _BV(3),
+            OutputEnable = _BV(4),
+            OutputEnable_Input = OutputEnable | Input,
+            Input_Output = Input | Output,
+            Clock_Input = Input | Clock,
+        };
+    public:
+        constexpr PinDescription(int index, byte mask = _BV(0), ValidStates states = ValidStates::None) noexcept : index_(index), mask_(mask), states_(states) { }
+        constexpr auto index() const noexcept { return index_; }
+        constexpr auto mask() const noexcept { return mask_; }
+        constexpr auto valid() const noexcept { return states_ != ValidStates::None; }
+        constexpr auto clockPin() const noexcept { return (states_ | ValidStates::Clock) != 0; }
+        constexpr auto outputEnablePin() const noexcept { return (states_ | ValidStates::OutputEnable) != 0; }
+        constexpr auto inputPin() const noexcept { return (states_ | ValidStates::Input) != 0; }
+        constexpr auto outputPin() const noexcept { return (states_ | ValidStates::Output) != 0; }
+        constexpr operator bool() const noexcept { return valid(); }
+    private:
+        int index_;
+        byte mask_;
+        ValidStates states_;
+};
+static constexpr PinDescription GAL16V8[20] {
+    PinDescription { 1, _BV(0), PinDescription::ValidStates::Clock_Input },
+    PinDescription { 2, _BV(7), PinDescription::ValidStates::Input },
+    PinDescription { 3, _BV(6), PinDescription::ValidStates::Input },
+    PinDescription { 4, _BV(5), PinDescription::ValidStates::Input },
+    PinDescription { 5, _BV(4), PinDescription::ValidStates::Input },
+    PinDescription { 6, _BV(3), PinDescription::ValidStates::Input },
+    PinDescription { 7, _BV(2), PinDescription::ValidStates::Input },
+    PinDescription { 8, _BV(1), PinDescription::ValidStates::Input },
+    PinDescription { 9, _BV(0), PinDescription::ValidStates::Input },
+    PinDescription { 10 }, // GND
+    PinDescription { 11, _BV(0), PinDescription::ValidStates::OutputEnable_Input },
+    PinDescription { 12, _BV(7), PinDescription::ValidStates::Input_Output },
+    PinDescription { 13, _BV(6), PinDescription::ValidStates::Input_Output },
+    PinDescription { 14, _BV(5), PinDescription::ValidStates::Input_Output },
+    PinDescription { 15, _BV(4), PinDescription::ValidStates::Input_Output },
+    PinDescription { 16, _BV(3), PinDescription::ValidStates::Input_Output },
+    PinDescription { 17, _BV(2), PinDescription::ValidStates::Input_Output },
+    PinDescription { 18, _BV(1), PinDescription::ValidStates::Input_Output },
+    PinDescription { 19, _BV(0), PinDescription::ValidStates::Input_Output },
+    PinDescription { 20 }, // VCC
+};
 class GALInterface {
         static constexpr byte generateReadOpcode(IOExpanderAddress addr) noexcept { return 0b0100'0001 | static_cast<uint8_t>(addr); }
         static constexpr byte generateWriteOpcode(IOExpanderAddress addr) noexcept { return 0b0100'0000 | static_cast<uint8_t>(addr); }
@@ -192,26 +241,8 @@ class GALInterface {
         };
     private:
         void updateInputs() noexcept;
-        static constexpr byte IndexMasks[18] {
-            1 << 0, // clk
-            1 << 7, 
-            1 << 6, 
-            1 << 5, 
-            1 << 4, 
-            1 << 3, 
-            1 << 2, 
-            1 << 1, 
-            1 << 0, 
-            1 << 0, // ~{OE}
-            1 << 7, 
-            1 << 6, 
-            1 << 5, 
-            1 << 4, 
-            1 << 3, 
-            1 << 2, 
-            1 << 1, 
-            1 << 0, 
-        };
+    private:
+        /// @todo implement GAL22V10
     public:
         /**
          * @brief Configure the pins which can be input or output, 0 is output,
