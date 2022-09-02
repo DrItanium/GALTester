@@ -361,14 +361,14 @@ GALInterface::isInputPin(int pin) const noexcept {
 
 uint8_t
 GALInterface::readOutputs() const noexcept {
-    return read8(MCP23x17Registers::GPIOA);
+    return read8(MCP23x17Registers::GPIOB);
 }
 void
 GALInterface::configureIOPins(uint8_t pattern) noexcept {
     ioPinConfiguration_ = pattern;
     // invert the bits since we want inputs _TO_ the GAL being an output and 
     // outputs _FROM_ the gal being inputs to the chip
-    write8(MCP23x17Registers::IODIRA, ~ioPinConfiguration_);
+    write8(MCP23x17Registers::IODIRB, ~ioPinConfiguration_);
 }
 void
 GALInterface::setClockFrequency(int freq) noexcept {
@@ -435,8 +435,8 @@ GALInterface::updateInputs() noexcept {
         digitalWrite(clk_, inputPinState_.bits.clkState);
     }
     digitalWrite(oe_, inputPinState_.bits.oeState);
-    write8(MCP23x17Registers::OLATB, inputPinState_.bits.inputs);
-    write8(MCP23x17Registers::OLATA, inputPinState_.bits.ioPins);
+    write8(MCP23x17Registers::OLATA, inputPinState_.bits.inputs);
+    write8(MCP23x17Registers::OLATB, inputPinState_.bits.ioPins);
 }
 
 void
@@ -500,7 +500,7 @@ GALInterface::begin() noexcept {
     digitalWrite(reset_, LOW);
     digitalWrite(reset_, HIGH);
     pinMode(IOEXP_INT, INPUT_PULLUP);
-    write16(MCP23x17Registers::IODIR, 0x00FF); // PORTA is set to inputs, PORTB are outputs
+    write16(MCP23x17Registers::IODIR, 0xFF00); // PORTB is set to inputs, PORTA are outputs
     write16(MCP23x17Registers::OLAT, 0xFFFF);
     setInputs(0); // set all inputs to low
     configureIOPins(0); // all will be _outputs_
@@ -743,6 +743,8 @@ GALInterface::displayRegisters() const noexcept {
     Serial.println(static_cast<byte>(~ioPinConfiguration_), BIN);
     Serial.print(F("Input values: 0b"));
     Serial.println(inputPinState_.getMaskedState(), BIN);
+    Serial.print(F("IO EXP Configuration: 0b"));
+    Serial.println(read16(MCP23x17Registers::IODIR), BIN);
 }
 bool
 displayRegisters(const String&) noexcept {
@@ -769,6 +771,7 @@ enum class ErrorCodes {
     StackEmpty,
     NotEnoughStackElements,
     DivideByZero,
+    NoSDCard,
 };
 extern String inputString;
 extern bool stringComplete;
@@ -854,6 +857,9 @@ handleError(bool state, bool stillEvaluating) noexcept {
             break;
         case ErrorCodes::UnknownWord:
             Serial.println(F("unknown word"));
+            break;
+        case ErrorCodes::NoSDCard:
+            Serial.println(F("no sd card inserted"));
             break;
         default: 
             Serial.println(F("some error happened")); 
@@ -1055,6 +1061,7 @@ bool duplicateTop(const String&) noexcept;
 bool setIOPinMode(const String&) noexcept;
 bool setInputPinValue(const String&) noexcept;
 bool swapStackElements(const String&) noexcept;
+bool runThroughAllPermutations(const String&) noexcept;
 void
 setupLookupTable() noexcept {
     defineWord(F("words"), listWords);
@@ -1124,6 +1131,7 @@ setupLookupTable() noexcept {
     defineWord(F("pins"), displayPinout);
     defineWord(F("status"), displayRegisters);
     defineWord(F("set-clock-frequency"), setClkFrequency);
+    defineWord(F("do-permutations"), runThroughAllPermutations);
 #define X(str, target) defineWord(F(str) , pushItemOntoStack<target>)
     X("input", INPUT);
     X("output", OUTPUT);
@@ -1397,5 +1405,28 @@ swapTopTwoStackElements() noexcept {
 bool
 duplicateTopOfStack() noexcept {
     return expectedNumberOfItemsOnStack(1) && pushItemOntoStack(theStack[stackPosition]);
+}
+
+bool
+runThroughAllPermutations(const String&) noexcept {
+    if (sdEnabled) {
+        // okay so we assume that at this point, we have already defined the
+        // apropriate pinout
+        File file = SD.open("output.txt", FILE_WRITE);
+        // the simplest thing to do now would be to just run through all
+        // 18-bit permutations and capture the result
+        for (int32_t pattern = 0; pattern < 0b11'1111'1111'1111'1111; ++pattern) {
+            iface.setInputs(pattern);
+            auto result = iface.readOutputs();
+            file.print(F("0b"));
+            file.print(pattern, BIN);
+            file.print(F(" => 0b"));
+            file.println(static_cast<uint16_t>(result), BIN);
+        }
+        file.close();
+    } else {
+        errorMessage = ErrorCodes::NoSDCard;
+    }
+    return sdEnabled;
 }
 
