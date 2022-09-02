@@ -302,20 +302,30 @@ GALInterface::GALInterface(byte chipSelect, byte oe, byte clk, byte reset, byte 
 }
 void 
 GALInterface::configureIOPin(int32_t pin, int mode) noexcept {
+    static constexpr byte lookupTable[8] {
+        7, // 10
+        6, // 11
+        5, // 12
+        4, // 13
+        3, // 14
+        2, // 15
+        1, // 16
+        0, // 17
+    };
     if (isIOPin(pin)) {
         switch (auto temporary = ioPinConfiguration_; mode) {
             case INPUT:
                 /// @todo disable pullups
-                temporary |= (1 << (pin - 10));
+                temporary |= (1 << lookupTable[pin - 10]);
                 configureIOPins(temporary);
                 break;
             case OUTPUT:
-                temporary &= ~(1 << (pin - 10));
+                temporary &= ~(1 << lookupTable[pin - 10]);
                 configureIOPins(temporary);
                 break;
             case INPUT_PULLUP:
                 /// @todo configure pullups
-                temporary |= (1 << (pin - 10));
+                temporary |= (1 << lookupTable[pin - 10]);
                 configureIOPins(temporary);
                 break;
             default:
@@ -331,14 +341,14 @@ bool
 GALInterface::isOutputPin(int pin) const noexcept {
     uint8_t inverse = ~ioPinConfiguration_;
     switch (pin) {
-        case 10: return ((inverse) & (1 << 0)) == 1;
-        case 11: return ((inverse) & (1 << 1)) == 1;
-        case 12: return ((inverse) & (1 << 2)) == 1;
-        case 13: return ((inverse) & (1 << 3)) == 1;
-        case 14: return ((inverse) & (1 << 4)) == 1;
-        case 15: return ((inverse) & (1 << 5)) == 1;
-        case 16: return ((inverse) & (1 << 6)) == 1;
-        case 17: return ((inverse) & (1 << 7)) == 1;
+        case 17: return ((inverse) & (1 << 0)) == 1;
+        case 16: return ((inverse) & (1 << 1)) == 1;
+        case 15: return ((inverse) & (1 << 2)) == 1;
+        case 14: return ((inverse) & (1 << 3)) == 1;
+        case 13: return ((inverse) & (1 << 4)) == 1;
+        case 12: return ((inverse) & (1 << 5)) == 1;
+        case 11: return ((inverse) & (1 << 6)) == 1;
+        case 10: return ((inverse) & (1 << 7)) == 1;
         default: return false;
     }
 }
@@ -347,14 +357,14 @@ bool
 GALInterface::isInputPin(int pin) const noexcept {
     uint8_t inverse = ~ioPinConfiguration_;
     switch (pin) {
-        case 10: return ((inverse) & (1 << 0)) == 0;
-        case 11: return ((inverse) & (1 << 1)) == 0;
-        case 12: return ((inverse) & (1 << 2)) == 0;
-        case 13: return ((inverse) & (1 << 3)) == 0;
-        case 14: return ((inverse) & (1 << 4)) == 0;
-        case 15: return ((inverse) & (1 << 5)) == 0;
-        case 16: return ((inverse) & (1 << 6)) == 0;
-        case 17: return ((inverse) & (1 << 7)) == 0;
+        case 17: return ((inverse) & (1 << 0)) == 0;
+        case 16: return ((inverse) & (1 << 1)) == 0;
+        case 15: return ((inverse) & (1 << 2)) == 0;
+        case 14: return ((inverse) & (1 << 3)) == 0;
+        case 13: return ((inverse) & (1 << 4)) == 0;
+        case 12: return ((inverse) & (1 << 5)) == 0;
+        case 11: return ((inverse) & (1 << 6)) == 0;
+        case 10: return ((inverse) & (1 << 7)) == 0;
         default: return true;
     }
 }
@@ -467,21 +477,21 @@ GALInterface::getInputState(int pin) const noexcept {
             return inputPinState_.bits.inputs & 0b1000'0000;
         case 9:
             return inputPinState_.bits.oeState;
-        case 10:
-            return inputPinState_.bits.ioPins & 0b0000'0001;
-        case 11:
-            return inputPinState_.bits.ioPins & 0b0000'0010;
-        case 12:
-            return inputPinState_.bits.ioPins & 0b0000'0100;
-        case 13:
-            return inputPinState_.bits.ioPins & 0b0000'1000;
-        case 14:
-            return inputPinState_.bits.ioPins & 0b0001'0000;
-        case 15:
-            return inputPinState_.bits.ioPins & 0b0010'0000;
-        case 16:
-            return inputPinState_.bits.ioPins & 0b0100'0000;
         case 17:
+            return inputPinState_.bits.ioPins & 0b0000'0001;
+        case 16:
+            return inputPinState_.bits.ioPins & 0b0000'0010;
+        case 15:
+            return inputPinState_.bits.ioPins & 0b0000'0100;
+        case 14:
+            return inputPinState_.bits.ioPins & 0b0000'1000;
+        case 13:
+            return inputPinState_.bits.ioPins & 0b0001'0000;
+        case 12:
+            return inputPinState_.bits.ioPins & 0b0010'0000;
+        case 11:
+            return inputPinState_.bits.ioPins & 0b0100'0000;
+        case 10:
             return inputPinState_.bits.ioPins & 0b1000'0000;
         default:
             return false;
