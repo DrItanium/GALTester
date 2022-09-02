@@ -192,6 +192,26 @@ class GALInterface {
         };
     private:
         void updateInputs() noexcept;
+        static constexpr byte IndexMasks[18] {
+            1 << 0, // clk
+            1 << 7, 
+            1 << 6, 
+            1 << 5, 
+            1 << 4, 
+            1 << 3, 
+            1 << 2, 
+            1 << 1, 
+            1 << 0, 
+            1 << 0, // ~{OE}
+            1 << 7, 
+            1 << 6, 
+            1 << 5, 
+            1 << 4, 
+            1 << 3, 
+            1 << 2, 
+            1 << 1, 
+            1 << 0, 
+        };
     public:
         /**
          * @brief Configure the pins which can be input or output, 0 is output,
@@ -459,21 +479,21 @@ GALInterface::getInputState(int pin) const noexcept {
     switch (pin) {
         case 0: 
             return inputPinState_.bits.clkState;
-        case 1:
-            return inputPinState_.bits.inputs & 0b0000'0001;
-        case 2:
-            return inputPinState_.bits.inputs & 0b0000'0010;
-        case 3:
-            return inputPinState_.bits.inputs & 0b0000'0100;
-        case 4:
-            return inputPinState_.bits.inputs & 0b0000'1000;
-        case 5:
-            return inputPinState_.bits.inputs & 0b0001'0000;
-        case 6:
-            return inputPinState_.bits.inputs & 0b0010'0000;
-        case 7:
-            return inputPinState_.bits.inputs & 0b0100'0000;
         case 8:
+            return inputPinState_.bits.inputs & 0b0000'0001;
+        case 7:
+            return inputPinState_.bits.inputs & 0b0000'0010;
+        case 6:
+            return inputPinState_.bits.inputs & 0b0000'0100;
+        case 5:
+            return inputPinState_.bits.inputs & 0b0000'1000;
+        case 4:
+            return inputPinState_.bits.inputs & 0b0001'0000;
+        case 3:
+            return inputPinState_.bits.inputs & 0b0010'0000;
+        case 2:
+            return inputPinState_.bits.inputs & 0b0100'0000;
+        case 1:
             return inputPinState_.bits.inputs & 0b1000'0000;
         case 9:
             return inputPinState_.bits.oeState;
