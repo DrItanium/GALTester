@@ -28,10 +28,6 @@
 #include <SD.h>
 #include <avr/pgmspace.h>
 #include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_ILI9341.h>
-#include <Adafruit_FT6206.h>
-#include <ArduinoJson.hpp>
 constexpr auto CS = A0;
 constexpr auto RESET_IOEXP = A2;
 constexpr auto IOEXP_INT = 2;
@@ -39,10 +35,6 @@ constexpr auto I9 = A1;
 constexpr auto I1_CLK = 5;
 constexpr auto CardDetect = -1;
 constexpr auto SDSelect = 4;
-constexpr auto TFTCS = 10;
-constexpr auto TFTDC = 9;
-Adafruit_ILI9341 tft(TFTCS, TFTDC);
-Adafruit_FT6206 ts;
 
 
 
@@ -573,41 +565,6 @@ GALInterface iface(CS,
         RESET_IOEXP, 
         IOEXP_INT, 
         IOExpanderAddress::GAL_16V8_Element);
-struct Configuration {
-    char name[128];
-    static constexpr auto NumTriggers = 18;
-    char configuration[NumTriggers];
-    const char* getName() const noexcept { return name; }
-    constexpr char getConfiguration(int index) const noexcept { return configuration[index % NumTriggers]; }
-    bool pinDisabled(int index) const noexcept { 
-        switch (getConfiguration(index)) {
-            case 'i':
-            case 'o':
-            case 'c':
-                return false;
-            default:
-                return true;
-        }
-    }
-    bool isClockPin(int index) const noexcept { return index == 0 && getConfiguration(index) == 'c'; }
-    bool isInputPin(int index) const noexcept { return getConfiguration(index) == 'i'; }
-    bool isOutputPin(int index) const noexcept { 
-        switch (index) {
-            case 10:
-            case 11:
-            case 12:
-            case 13:
-            case 14:
-            case 15:
-            case 16:
-            case 17:
-                return getConfiguration(index) == 'o';
-            default:
-                return false;
-        }
-    }
-    static Configuration get(const char* filename);
-};
 volatile bool sdEnabled = false;
 void setupDisplay() noexcept;
 void setupLookupTable() noexcept; 
@@ -616,29 +573,13 @@ void eval() noexcept;
 void 
 setup() {
     Serial.begin(9600);
+    while (!Serial) {
+        delay(100);
+    }
     Serial.println(F("GAL Testing Interface"));
     Serial.println(F("(C) 2022 Joshua Scoggins"));
     Serial.println(F("This is open source software! See LICENSE for details"));
     Serial.println();
-    Serial.println(F("TFT Bringup"));
-    asm volatile ("nop");
-    tft.begin();
-    auto x = tft.readcommand8(ILI9341_RDMODE);
-    Serial.print(F("Display Power Mode: 0x")); Serial.println(x, HEX);
-    x = tft.readcommand8(ILI9341_RDMADCTL);
-    Serial.print(F("MADCTL Mode: 0x")); Serial.println(x, HEX);
-    x = tft.readcommand8(ILI9341_RDPIXFMT);
-    Serial.print(F("Pixel Format: 0x")); Serial.println(x, HEX);
-    x = tft.readcommand8(ILI9341_RDIMGFMT);
-    Serial.print(F("Image Format: 0x")); Serial.println(x, HEX);
-    x = tft.readcommand8(ILI9341_RDSELFDIAG);
-    Serial.print(F("Self Diagnostic: 0x")); Serial.println(x, HEX);
-    Serial.println();
-
-    Serial.println();
-    Serial.println(F("Touchscreen Bringup"));
-    ts.begin();
-    setupDisplay();
     SPI.begin();
     setupLookupTable();
     iface.begin();
@@ -665,15 +606,6 @@ setup() {
     }
     Serial.println();
 }
-void forwardClear(int x, int y, int count) noexcept {
-    tft.setTextColor(ILI9341_BLACK);
-    for (int i = 0; i < count; ++i) {
-        tft.print(static_cast<char>(0xDA));
-    }
-    tft.setTextColor(ILI9341_WHITE);
-    
-    tft.setCursor(x, y);
-}
 
 void loop() {
     read();
@@ -682,72 +614,6 @@ void loop() {
 }
 
 
-Configuration
-Configuration::get(const char* filename) {
-    File file = SD.open(filename);
-    ArduinoJson::StaticJsonDocument<512> doc;
-
-    auto error = deserializeJson(doc, file);
-    if (error) {
-        Serial.println(F("Failed to read file, using default configuration"));
-    }
-    Configuration cfg;
-    strlcpy(cfg.name, 
-            doc["name"] | "default", 
-            sizeof(cfg.name));
-    strlcpy(cfg.configuration, 
-            doc["cfg"] | "xxxxxxxxxxxxxxxxxx", 
-            sizeof(cfg.configuration));
-    file.close();
-    return cfg;
-}
-
-class Area {
-    public:
-        constexpr Area(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) : x_(x), y_(y), width_(w), height_(h), color_(color) { }
-        [[nodiscard]] constexpr auto getX() const noexcept { return x_; }
-        [[nodiscard]] constexpr auto getY() const noexcept { return y_; }
-        [[nodiscard]] constexpr auto getWidth() const noexcept { return width_; }
-        [[nodiscard]] constexpr auto getHeight() const noexcept { return height_; }
-        [[nodiscard]] constexpr auto getColor() const noexcept { return color_; }
-        [[nodiscard]] bool intersects(int px, int py) const noexcept {
-            /// @todo width and height may need to be swapped etc
-            auto xEnd = x_ + width_;
-            auto yEnd = y_ + height_;
-            return (x_ <= px && px <= xEnd) &&
-                   (y_ <= py && py <= yEnd);
-        }
-        template<typename T>
-        void fillRect(T& tft) noexcept {
-            tft.fillRect( x_, y_, width_, height_, color_);
-        }
-    private:
-        int16_t x_, y_;
-        int16_t width_, height_;
-        uint16_t color_;
-};
-
-void
-setupDisplay() noexcept {
-    Serial.println(F("Clearing Screen!"));
-    tft.fillScreen(ILI9341_BLACK);
-    //auto properWidth = tft.width()/2;
-    //auto properHeight = tft.height() / 8;
-    //Area test(properWidth, 0, properWidth, properHeight, ILI9341_YELLOW);
-    //Area test2(properWidth,properHeight*1, properWidth, properHeight, ILI9341_GREEN);
-    //Area test3(properWidth,properHeight*2, properWidth, properHeight, ILI9341_CYAN);
-    //Area test4(properWidth,properHeight*3, properWidth, properHeight, ILI9341_RED);
-    //Area test5(properWidth,properHeight*4, properWidth, properHeight, ILI9341_BLUE);
-    //Area test6(properWidth,properHeight*5, properWidth, properHeight, ILI9341_WHITE);
-    //test.fillRect(tft);
-    //test2.fillRect(tft);
-    //test3.fillRect(tft);
-    //test4.fillRect(tft);
-    //test5.fillRect(tft);
-    //test6.fillRect(tft);
-    //delay(3000);
-    //tft.fillScreen(ILI9341_BLACK);
-}
 
 
 class Word {
@@ -772,7 +638,7 @@ class LambdaWord : public Word {
     private:
         Function func_;
 };
-constexpr auto MaxNumberOfWords = 256;
+constexpr auto MaxNumberOfWords = 64;
 extern Word* lookupTable[MaxNumberOfWords];
 bool
 listWords(const String&) noexcept {
@@ -978,7 +844,7 @@ eval() noexcept {
 }
 
 
-#ifdef ARDUINO_AVR_UNO
+#if defined(ARDUINO_AVR_UNO) || defined(ARDUINO_AVR_LEONARDO)
 #if __cplusplus >= 201402L
 void operator delete(void* ptr, size_t) {
     ::operator delete(ptr);
@@ -1126,6 +992,7 @@ bool runThroughAllPermutations(const String&) noexcept;
 void
 setupLookupTable() noexcept {
     defineWord(F("words"), listWords);
+#if 0
     defineWord(F("drop"), dropTopOfStack);
     defineWord(F("dup"), duplicateTop);
     defineWord(F("swap"), swapStackElements);
@@ -1161,7 +1028,6 @@ setupLookupTable() noexcept {
 
 
 
-
     defineWord(F("or"), orTwoNumbers);
     defineWord(F("and"), andTwoNumbers);
     defineWord(F("xor"), xorTwoNumbers);
@@ -1186,6 +1052,7 @@ setupLookupTable() noexcept {
     defineWord(F("0<"), [](const String& str) { return pushItemOntoStack(0) && topGreaterThanLower(str); });
     defineWord(F("0>"), [](const String& str) { return pushItemOntoStack(0) && topLessThanLower(str); });
     defineWord(F("0<>"), [](const String& str) { return pushItemOntoStack(0) && twoNumbersNotEqual(str); });
+#endif
     // pin manipulators
     defineWord(F("io-pin-mode"), setIOPinMode);
     defineWord(F("set-input"), setInputPinValue);
