@@ -26,9 +26,11 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <SD.h>
+#ifdef __AVR__
 #include <avr/pgmspace.h>
+#endif
 #include <Wire.h>
-#ifndef __avr__
+#ifndef __AVR__
 #include <functional>
 #endif
 constexpr auto CS = A0;
@@ -635,7 +637,7 @@ class Word {
 class LambdaWord : public Word {
     public:
         using Parent = Word;
-#ifdef __avr__
+#ifdef __AVR__
         using Function = bool (*)(const String&);
 #else
         using Function = std::function<bool(const String&)>;
@@ -715,7 +717,7 @@ extern bool stringComplete;
 extern unsigned int position;
 extern ErrorCodes errorMessage;
 void
-read() {
+read() noexcept {
     while (Serial.available()) {
         char inChar = static_cast<char>(Serial.read());
         if (inChar == 0x08) {
@@ -811,7 +813,7 @@ handleError(bool state, bool stillEvaluating) noexcept {
     return state;
 }
 void
-clearState() {
+clearState() noexcept {
     errorMessage = ErrorCodes::None; 
     inputString = "";
     stringComplete = false;
