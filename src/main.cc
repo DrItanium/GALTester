@@ -28,6 +28,9 @@
 #include <SD.h>
 #include <avr/pgmspace.h>
 #include <Wire.h>
+#ifndef __avr__
+#include <functional>
+#endif
 constexpr auto CS = A0;
 constexpr auto RESET_IOEXP = A2;
 constexpr auto IOEXP_INT = 2;
@@ -48,7 +51,10 @@ enum class IOExpanderAddress : byte {
     OtherDevice5 = 0b1100,
     OtherDevice6 = 0b1110,
 };
-class PinDescription {
+#ifndef _BV
+#define _BV(x) (1 << x)
+#endif
+class GALPinDescription {
     public:
         enum ValidStates : byte {
             None = 0,
@@ -61,7 +67,7 @@ class PinDescription {
             Clock_Input = Input | Clock,
         };
     public:
-        constexpr PinDescription(int index, byte mask = _BV(0), ValidStates states = ValidStates::None) noexcept : index_(index), mask_(mask), states_(states) { }
+        constexpr GALPinDescription(int index, byte mask = _BV(0), ValidStates states = ValidStates::None) noexcept : index_(index), mask_(mask), states_(states) { }
         constexpr auto index() const noexcept { return index_; }
         constexpr auto mask() const noexcept { return mask_; }
         constexpr auto valid() const noexcept { return states_ != ValidStates::None; }
@@ -75,27 +81,27 @@ class PinDescription {
         byte mask_;
         ValidStates states_;
 };
-static constexpr PinDescription GAL16V8[20] {
-    PinDescription { 1, _BV(0), PinDescription::ValidStates::Clock_Input },
-    PinDescription { 2, _BV(7), PinDescription::ValidStates::Input },
-    PinDescription { 3, _BV(6), PinDescription::ValidStates::Input },
-    PinDescription { 4, _BV(5), PinDescription::ValidStates::Input },
-    PinDescription { 5, _BV(4), PinDescription::ValidStates::Input },
-    PinDescription { 6, _BV(3), PinDescription::ValidStates::Input },
-    PinDescription { 7, _BV(2), PinDescription::ValidStates::Input },
-    PinDescription { 8, _BV(1), PinDescription::ValidStates::Input },
-    PinDescription { 9, _BV(0), PinDescription::ValidStates::Input },
-    PinDescription { 10 }, // GND
-    PinDescription { 11, _BV(0), PinDescription::ValidStates::OutputEnable_Input },
-    PinDescription { 12, _BV(7), PinDescription::ValidStates::Input_Output },
-    PinDescription { 13, _BV(6), PinDescription::ValidStates::Input_Output },
-    PinDescription { 14, _BV(5), PinDescription::ValidStates::Input_Output },
-    PinDescription { 15, _BV(4), PinDescription::ValidStates::Input_Output },
-    PinDescription { 16, _BV(3), PinDescription::ValidStates::Input_Output },
-    PinDescription { 17, _BV(2), PinDescription::ValidStates::Input_Output },
-    PinDescription { 18, _BV(1), PinDescription::ValidStates::Input_Output },
-    PinDescription { 19, _BV(0), PinDescription::ValidStates::Input_Output },
-    PinDescription { 20 }, // VCC
+static constexpr GALPinDescription GAL16V8[20] {
+    GALPinDescription { 1, _BV(0), GALPinDescription::ValidStates::Clock_Input },
+    GALPinDescription { 2, _BV(7), GALPinDescription::ValidStates::Input },
+    GALPinDescription { 3, _BV(6), GALPinDescription::ValidStates::Input },
+    GALPinDescription { 4, _BV(5), GALPinDescription::ValidStates::Input },
+    GALPinDescription { 5, _BV(4), GALPinDescription::ValidStates::Input },
+    GALPinDescription { 6, _BV(3), GALPinDescription::ValidStates::Input },
+    GALPinDescription { 7, _BV(2), GALPinDescription::ValidStates::Input },
+    GALPinDescription { 8, _BV(1), GALPinDescription::ValidStates::Input },
+    GALPinDescription { 9, _BV(0), GALPinDescription::ValidStates::Input },
+    GALPinDescription { 10 }, // GND
+    GALPinDescription { 11, _BV(0), GALPinDescription::ValidStates::OutputEnable_Input },
+    GALPinDescription { 12, _BV(7), GALPinDescription::ValidStates::Input_Output },
+    GALPinDescription { 13, _BV(6), GALPinDescription::ValidStates::Input_Output },
+    GALPinDescription { 14, _BV(5), GALPinDescription::ValidStates::Input_Output },
+    GALPinDescription { 15, _BV(4), GALPinDescription::ValidStates::Input_Output },
+    GALPinDescription { 16, _BV(3), GALPinDescription::ValidStates::Input_Output },
+    GALPinDescription { 17, _BV(2), GALPinDescription::ValidStates::Input_Output },
+    GALPinDescription { 18, _BV(1), GALPinDescription::ValidStates::Input_Output },
+    GALPinDescription { 19, _BV(0), GALPinDescription::ValidStates::Input_Output },
+    GALPinDescription { 20 }, // VCC
 };
 class GALInterface {
         static constexpr byte generateReadOpcode(IOExpanderAddress addr) noexcept { return 0b0100'0001 | static_cast<uint8_t>(addr); }
@@ -384,14 +390,14 @@ bool
 GALInterface::isOutputPin(int pin) const noexcept {
     uint8_t inverse = ~ioPinConfiguration_;
     switch (pin) {
-        case 17: return ((inverse) & (1 << 0)) == 1;
-        case 16: return ((inverse) & (1 << 1)) == 1;
-        case 15: return ((inverse) & (1 << 2)) == 1;
-        case 14: return ((inverse) & (1 << 3)) == 1;
-        case 13: return ((inverse) & (1 << 4)) == 1;
-        case 12: return ((inverse) & (1 << 5)) == 1;
-        case 11: return ((inverse) & (1 << 6)) == 1;
-        case 10: return ((inverse) & (1 << 7)) == 1;
+        case 17: return ((inverse) & static_cast<uint8_t>(1 << 0)) == 1;
+        case 16: return ((inverse) & static_cast<uint8_t>(1 << 1)) == 1;
+        case 15: return ((inverse) & static_cast<uint8_t>(1 << 2)) == 1;
+        case 14: return ((inverse) & static_cast<uint8_t>(1 << 3)) == 1;
+        case 13: return ((inverse) & static_cast<uint8_t>(1 << 4)) == 1;
+        case 12: return ((inverse) & static_cast<uint8_t>(1 << 5)) == 1;
+        case 11: return ((inverse) & static_cast<uint8_t>(1 << 6)) == 1;
+        case 10: return ((inverse) & static_cast<uint8_t>(1 << 7)) == 1;
         default: return false;
     }
 }
@@ -400,14 +406,14 @@ bool
 GALInterface::isInputPin(int pin) const noexcept {
     uint8_t inverse = ~ioPinConfiguration_;
     switch (pin) {
-        case 17: return ((inverse) & (1 << 0)) == 0;
-        case 16: return ((inverse) & (1 << 1)) == 0;
-        case 15: return ((inverse) & (1 << 2)) == 0;
-        case 14: return ((inverse) & (1 << 3)) == 0;
-        case 13: return ((inverse) & (1 << 4)) == 0;
-        case 12: return ((inverse) & (1 << 5)) == 0;
-        case 11: return ((inverse) & (1 << 6)) == 0;
-        case 10: return ((inverse) & (1 << 7)) == 0;
+        case 17: return ((inverse) & static_cast<uint8_t>(1 << 0)) == 0;
+        case 16: return ((inverse) & static_cast<uint8_t>(1 << 1)) == 0;
+        case 15: return ((inverse) & static_cast<uint8_t>(1 << 2)) == 0;
+        case 14: return ((inverse) & static_cast<uint8_t>(1 << 3)) == 0;
+        case 13: return ((inverse) & static_cast<uint8_t>(1 << 4)) == 0;
+        case 12: return ((inverse) & static_cast<uint8_t>(1 << 5)) == 0;
+        case 11: return ((inverse) & static_cast<uint8_t>(1 << 6)) == 0;
+        case 10: return ((inverse) & static_cast<uint8_t>(1 << 7)) == 0;
         default: return true;
     }
 }
@@ -629,7 +635,11 @@ class Word {
 class LambdaWord : public Word {
     public:
         using Parent = Word;
+#ifdef __avr__
         using Function = bool (*)(const String&);
+#else
+        using Function = std::function<bool(const String&)>;
+#endif
         explicit LambdaWord(const String& name, Function theFunction) : Parent(name), func_(theFunction)  { }
         ~LambdaWord() override = default;
         bool invoke(const String& match) noexcept override {
@@ -1066,8 +1076,10 @@ setupLookupTable() noexcept {
     //X("input-pullup", INPUT_PULLUP);
     X("low", LOW);
     X("high", HIGH);
+#ifdef __avr__
     X("true", 0xFFFF'FFFF);
     X("false", 0);
+#endif
     X("P1", 0);
     X("P2", 1);
     X("P3", 2);
