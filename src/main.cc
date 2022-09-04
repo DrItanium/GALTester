@@ -67,6 +67,7 @@ class GALPinDescription {
     public:
         constexpr GALPinDescription(int index, byte mask = _BV(0), ValidStates states = ValidStates::None) noexcept : index_(index), mask_(mask), states_(states) { }
         constexpr auto index() const noexcept { return index_; }
+        constexpr auto zeroIndex() const noexcept { return index() - 1; }
         constexpr auto mask() const noexcept { return mask_; }
         constexpr auto valid() const noexcept { return states_ != ValidStates::None; }
         constexpr auto clockPin() const noexcept { return (states_ & ValidStates::Clock) != 0; }
@@ -290,6 +291,7 @@ class GALInterface {
             auto sample = readOutputs();
             thing.println(F("Pin states as seen from the perspective of the gal"));
             for (const auto& pin : GAL16V8) {
+                if (pin) {
                     printPinId(thing, pin.index());
                     if (pin.clockPin()) {
                         if (clockPinIsDigitalInput()) {
@@ -310,16 +312,14 @@ class GALInterface {
                             thing.print(F("I ("));
                             printSingleHighLowInput(thing, pin);
                         } else {
-                            auto bit = sample & pin.mask();
-                            Serial.print(F("\tbit: 0b"));
-                            Serial.println(bit, BIN);
                             thing.print(F("O ("));
-                            printSingleHighLow(thing, bit);
+                            printSingleHighLow(thing, sample & pin.mask());
                         }
                     } else {
                         thing.print(F("U ("));
                     }
                     thing.println(F(")"));
+                }
             }
         }
         bool isInputPin(const GALPinDescription& pin) const noexcept;
@@ -856,25 +856,25 @@ Y(inputWord, "input", INPUT);
 Y(outputWord, "output", OUTPUT);
 Y(lowWord, "low", LOW);
 Y(highWord, "high", HIGH);
-Y(Pin_I1,  "I1",  GAL16V8[0].index()); Y(Pin_CLK, "CLK", GAL16V8[0].index());
-Y(Pin_I2,  "I2",  GAL16V8[1].index());
-Y(Pin_I3,  "I3",  GAL16V8[2].index());
-Y(Pin_I4,  "I4",  GAL16V8[3].index());
-Y(Pin_I5,  "I5",  GAL16V8[4].index());
-Y(Pin_I6,  "I6",  GAL16V8[5].index());
-Y(Pin_I7,  "I7",  GAL16V8[6].index());
-Y(Pin_I8,  "I8",  GAL16V8[7].index());
-Y(Pin_I9,  "I9",  GAL16V8[8].index());
-Y(Pin_I10, "I10", GAL16V8[10].index()); Y(Pin_OE, "OE", GAL16V8[10].index());
+Y(Pin_I1,  "I1",  GAL16V8[0].zeroIndex()); Y(Pin_CLK, "CLK", GAL16V8[0].zeroIndex());
+Y(Pin_I2,  "I2",  GAL16V8[1].zeroIndex());
+Y(Pin_I3,  "I3",  GAL16V8[2].zeroIndex());
+Y(Pin_I4,  "I4",  GAL16V8[3].zeroIndex());
+Y(Pin_I5,  "I5",  GAL16V8[4].zeroIndex());
+Y(Pin_I6,  "I6",  GAL16V8[5].zeroIndex());
+Y(Pin_I7,  "I7",  GAL16V8[6].zeroIndex());
+Y(Pin_I8,  "I8",  GAL16V8[7].zeroIndex());
+Y(Pin_I9,  "I9",  GAL16V8[8].zeroIndex());
+Y(Pin_I10, "I10", GAL16V8[10].zeroIndex()); Y(Pin_OE, "OE", GAL16V8[10].zeroIndex());
 
-Y(Pin_IO8, "IO8", GAL16V8[11].index());
-Y(Pin_IO7, "IO7", GAL16V8[12].index());
-Y(Pin_IO6, "IO6", GAL16V8[13].index());
-Y(Pin_IO5, "IO5", GAL16V8[14].index());
-Y(Pin_IO4, "IO4", GAL16V8[15].index());
-Y(Pin_IO3, "IO3", GAL16V8[16].index());
-Y(Pin_IO2, "IO2", GAL16V8[17].index());
-Y(Pin_IO1, "IO1", GAL16V8[18].index());
+Y(Pin_IO8, "IO8", GAL16V8[11].zeroIndex());
+Y(Pin_IO7, "IO7", GAL16V8[12].zeroIndex());
+Y(Pin_IO6, "IO6", GAL16V8[13].zeroIndex());
+Y(Pin_IO5, "IO5", GAL16V8[14].zeroIndex());
+Y(Pin_IO4, "IO4", GAL16V8[15].zeroIndex());
+Y(Pin_IO3, "IO3", GAL16V8[16].zeroIndex());
+Y(Pin_IO2, "IO2", GAL16V8[17].zeroIndex());
+Y(Pin_IO1, "IO1", GAL16V8[18].zeroIndex());
 Z(binaryConvertWord, "binary convert", "0b", 2);
 Z(fallback, "fallback numeric conversion (no prefix)", "", 0);
 #undef Z
