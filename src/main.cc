@@ -586,8 +586,11 @@ using TreatAsBoolean = TreatAs<bool>;
 bool pushItemOntoStack(int32_t value) noexcept;
 bool pushItemOntoStack(bool value, TreatAsBoolean) noexcept { return pushItemOntoStack(value ? 0xFFFF'FFFF : 0); }
 bool pushItemOntoStack(volatile bool value, TreatAs<volatile bool>) noexcept { return pushItemOntoStack(static_cast<bool>(value), TreatAsBoolean{}); }
-bool pushItemOntoStack(int32_t value, TreatAs<int32_t>) noexcept { return pushItemOntoStack(value); }
 bool pushItemOntoStack(int value, TreatAs<int>) noexcept { return pushItemOntoStack(value); }
+template<typename T>
+bool pushItemOntoStack(T value, TreatAs<T>) noexcept {
+    return pushItemOntoStack(static_cast<int32_t>(value));
+}
 bool expectedNumberOfItemsOnStack(byte numberOfItems) noexcept;
 bool popItemOffStack(int32_t& item) noexcept;
 bool dropTopOfStack() noexcept;
