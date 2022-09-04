@@ -682,8 +682,6 @@ GALInterface::displayRegisters() const noexcept {
     Serial.println(static_cast<byte>(~ioPinConfiguration_), BIN);
     Serial.print(F("Input values: 0b"));
     Serial.println(inputPinState_.getMaskedState(), BIN);
-    Serial.print(F("IO EXP Configuration: 0b"));
-    Serial.println(read16(MCP23x17Registers::IODIR), BIN);
 }
 bool
 displayRegisters(const String&) noexcept {
@@ -1004,84 +1002,19 @@ bool runThroughAllPermutations(const String&) noexcept;
 void
 setupLookupTable() noexcept {
     defineWord(F("words"), listWords);
-#if 0
-    defineWord(F("drop"), dropTopOfStack);
-    defineWord(F("dup"), duplicateTop);
-    defineWord(F("swap"), swapStackElements);
-    defineWord(F("depth"), depth);
-    defineWord(F("rot"), 
-            [](const String&) noexcept {
-                if (expectedNumberOfItemsOnStack(3)) {
-                    int32_t x1, x2, x3;
-                    popItemOffStack(x3);
-                    popItemOffStack(x2);
-                    popItemOffStack(x1);
-                    pushItemOntoStack(x2);
-                    pushItemOntoStack(x3);
-                    pushItemOntoStack(x1);
-                    return true;
-                } 
-                return false;
-            });
-    defineWord(F("2drop"), [](const String& str) { return dropTopOfStack(str) && dropTopOfStack(str); });
-    defineWord(F("2dup"), [](const String&) {
-                if (expectedNumberOfItemsOnStack(2)) {
-                    int32_t top, lower;
-                    popItemOffStack(top);
-                    popItemOffStack(lower);
-                    pushItemOntoStack(lower);
-                    pushItemOntoStack(top);
-                    pushItemOntoStack(lower);
-                    pushItemOntoStack(top);
-                    return true;
-                } 
-                return false;
-            });
-
-
-
-    defineWord(F("or"), orTwoNumbers);
-    defineWord(F("and"), andTwoNumbers);
-    defineWord(F("xor"), xorTwoNumbers);
     defineWord(F("."), popAndPrintStackTop);
     defineWord(F(".s"), printStackContents);
-    defineWord(F("+"), addTwoNumbers);
-    defineWord(F("-"), subtractTwoNumbers);
-    defineWord(F("*"), multiplyTwoNumbers);
-    defineWord(F("/"), divideTwoNumbers);
-    defineWord(F("%"), moduloTwoNumbers);
-    defineWord(F("="), twoNumbersEqual);
-    defineWord(F("<>"), twoNumbersNotEqual);
-    defineWord(F(">"), topLessThanLower);
-    defineWord(F("<"), topGreaterThanLower);
-    defineWord(F("<="), topLessThanOrEqualLower);
-    defineWord(F(">="), topGreaterThanOrEqualLower);
-    defineWord(F("1+"), [](const String& str) { return pushItemOntoStack(1) && addTwoNumbers(str); });
-    defineWord(F("1-"), [](const String& str) { return pushItemOntoStack(1) && subtractTwoNumbers(str); });
-    defineWord(F("2*"), [](const String& str) { return pushItemOntoStack(2) && multiplyTwoNumbers(str); });
-    defineWord(F("2/"), [](const String& str) { return pushItemOntoStack(2) && divideTwoNumbers(str); });
-    defineWord(F("0="), [](const String& str) { return pushItemOntoStack(0) && twoNumbersEqual(str); });
-    defineWord(F("0<"), [](const String& str) { return pushItemOntoStack(0) && topGreaterThanLower(str); });
-    defineWord(F("0>"), [](const String& str) { return pushItemOntoStack(0) && topLessThanLower(str); });
-    defineWord(F("0<>"), [](const String& str) { return pushItemOntoStack(0) && twoNumbersNotEqual(str); });
-#endif
     // pin manipulators
     defineWord(F("io-pin-mode"), setIOPinMode);
     defineWord(F("set-input"), setInputPinValue);
     defineWord(F("pins"), displayPinout);
     defineWord(F("status"), displayRegisters);
-    defineWord(F("set-clock-frequency"), setClkFrequency);
     defineWord(F("do-permutations"), runThroughAllPermutations);
 #define X(str, target) defineWord(F(str) , pushItemOntoStack<target>)
     X("input", INPUT);
     X("output", OUTPUT);
-    //X("input-pullup", INPUT_PULLUP);
     X("low", LOW);
     X("high", HIGH);
-#ifdef __avr__
-    X("true", 0xFFFF'FFFF);
-    X("false", 0);
-#endif
     X("P1", 0);
     X("P2", 1);
     X("P3", 2);
@@ -1102,10 +1035,10 @@ setupLookupTable() noexcept {
     X("P19", 17);
 #undef X
 
-    defineSpecialWord<NumericBaseCapture>(F("binary-convert (prefix is 0b)"), F("0b"), 2);
+    defineSpecialWord<NumericBaseCapture>(F("binary convert"), F("0b"), 2);
 
     // must come last
-    if (!defineSpecialWord<NumericBaseCapture>(F("fallback-capture (prefix is nothing)"), "", 0)) {
+    if (!defineSpecialWord<NumericBaseCapture>(F("last word"), F(""), 0)) {
         Serial.println(F("TOO MANY WORDS DEFINED! HALTING!!"));
         while (true);
     }
@@ -1116,7 +1049,7 @@ String inputString = "";         // a String to hold incoming data
 bool stringComplete = false;  // whether the string is complete
 unsigned int position = 0;
 ErrorCodes errorMessage = ErrorCodes::None;
-constexpr auto numStackElements = 32;
+constexpr auto numStackElements = 8;
 uint8_t stackPosition = numStackElements;
 uint32_t theStack[numStackElements];
 
