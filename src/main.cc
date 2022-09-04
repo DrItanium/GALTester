@@ -73,6 +73,7 @@ class GALPinDescription {
         constexpr auto outputEnablePin() const noexcept { return (states_ | ValidStates::OutputEnable) != 0; }
         constexpr auto inputPin() const noexcept { return (states_ | ValidStates::Input) != 0; }
         constexpr auto outputPin() const noexcept { return (states_ | ValidStates::Output) != 0; }
+        constexpr auto inputOnlyPin() const noexcept { return inputPin() && !outputPin(); }
         constexpr operator bool() const noexcept { return valid(); }
     private:
         int index_;
@@ -256,6 +257,7 @@ class GALInterface {
         constexpr auto getClockFrequency() const noexcept { return clockFrequency_; }
         void setInput(int pin, bool state) noexcept;
         bool getInputState(int pin) const noexcept;
+        bool getInputState(const GALPinDescription& desc) const noexcept;
     private:
         template<typename T>
         void
@@ -268,7 +270,7 @@ class GALInterface {
         }
         template<typename T>
         void
-        printSingleHighLowInput(T& thing, int i) const noexcept {
+        printSingleHighLowInput(T& thing, const GALPinDescription& i) const noexcept {
             printSingleHighLow(thing, getInputState(i));
         }
         template<typename T>
@@ -282,40 +284,39 @@ class GALInterface {
         template<typename T>
         void 
         printPinStates(T& thing) const noexcept {
-            thing.println(F("Pin states as seen from the perspective of the gal"));
-            printPinId(thing, 1);
-            if (clockPinIsDigitalInput()) {
-                thing.print(F("I ("));
-                printSingleHighLowInput(thing, 0);
-            } else {
-                thing.print(F("CLK ("));
-                thing.print(getClockFrequency());
-            }
-            thing.println(F(")"));
-            for (int i = 1; i < 9; ++i) {
-                printPinId(thing, i + 1);
-                thing.print(F("I ("));
-                printSingleHighLowInput(thing, i);
-                thing.println(F(")"));
-            }
-            thing.print(F("P11: I/~{OE} ("));
-            printSingleHighLowInput(thing, 9);
-            thing.println(F(")"));
-
             auto sample = readOutputs();
-            for (int i = 10, j = 0; i < 18; ++i, ++j) {
-                printPinId(thing, i + 2);
-                if (isInputPin(i)) {
-                    thing.print(F("I ("));
-                    printSingleHighLowInput(thing, i);
-                } else {
-                    auto bit = sample & (1 << j);
-                    thing.print(F("O ("));
-                    printSingleHighLow(thing, bit);
-                }
-                thing.println(F(")"));
-            }
+            thing.println(F("Pin states as seen from the perspective of the gal"));
+            for (const auto& pin : GAL16V8) {
+                if (pin) {
+                    printPinId(thing, pin.index());
+                    if (pin.clockPin()) {
+                        if (clockPinIsDigitalInput()) {
+                            thing.print(F("I ("));
+                            printSingleHighLowInput(thing, pin);
+                        } else {
+                            thing.print(F("CLK ("));
+                            thing.print(getClockFrequency());
+                        }
+                    } else if (pin.outputEnablePin()) {
+                        thing.print(F("I/~{OE} ("));
+                        printSingleHighLowInput(thing, pin);
+                    } else if (pin.inputOnlyPin()) {
+                        thing.print(F("I ("));
+                        printSingleHighLowInput(thing, pin);
+                    } else if (pin.outputPin()) {
+                        if (isInputPin(pin)) {
+                            thing.print(F("I ("));
+                            printSingleHighLowInput(thing, pin);
+                        } else {
 
+                            auto bit = sample & pin.mask();
+                            thing.print(F("O ("));
+                            printSingleHighLow(thing, bit);
+                        }
+                    }
+                    thing.println(F(")"));
+                }
+            }
         }
         bool isOutputPin(int pin) const noexcept;
         bool isInputPin(int pin) const noexcept;
@@ -500,6 +501,20 @@ void
 GALInterface::setInputs(uint32_t pattern) noexcept {
     inputPinState_.full = pattern;
     updateInputs();
+}
+bool
+GALInterface::getInputState(const GALPinDescription& pin) const noexcept {
+    if (pin.clockPin()) {
+        return inputPinState_.bits.clkState;
+    } else if (pin.inputOnlyPin()) {
+        return inputPinState_.bits.inputs & pin.mask();
+    } else if (pin.outputPin()) {
+        return inputPinState_.bits.ioPins & pin.mask();
+    } else if (pin.outputEnablePin()) {
+        return inputPinState_.bits.oeState;
+    } else {
+        return false;
+    }
 }
 bool
 GALInterface::getInputState(int pin) const noexcept {
@@ -951,24 +966,25 @@ Y(inputWord, "input", INPUT);
 Y(outputWord, "output", OUTPUT);
 Y(lowWord, "low", LOW);
 Y(highWord, "high", HIGH);
-Y(P1, "P1", 0);
-Y(P2, "P2", 1);
-Y(P3, "P3", 2);
-Y(P4, "P4", 3);
-Y(P5, "P5", 4);
-Y(P6, "P6", 5);
-Y(P7, "P7", 6);
-Y(P8, "P8", 7);
-Y(P9, "P9", 8);
-Y(P11, "P11", 9);
-Y(P12, "P12", 10);
-Y(P13, "P13", 11);
-Y(P14, "P14", 12);
-Y(P15, "P15", 13);
-Y(P16, "P16", 14);
-Y(P17, "P17", 15);
-Y(P18, "P18", 16);
-Y(P19, "P19", 17);
+Y(Pin_I1,  "I1",  GAL16V8[0].index()); Y(Pin_CLK, "CLK", GAL16V8[0].index());
+Y(Pin_I2,  "I2",  GAL16V8[1].index());
+Y(Pin_I3,  "I3",  GAL16V8[2].index());
+Y(Pin_I4,  "I4",  GAL16V8[3].index());
+Y(Pin_I5,  "I5",  GAL16V8[4].index());
+Y(Pin_I6,  "I6",  GAL16V8[5].index());
+Y(Pin_I7,  "I7",  GAL16V8[6].index());
+Y(Pin_I8,  "I8",  GAL16V8[7].index());
+Y(Pin_I9,  "I9",  GAL16V8[8].index());
+Y(Pin_I10, "I10", GAL16V8[11].index()); Y(Pin_OE, "OE", GAL16V8[11].index());
+
+Y(Pin_IO8, "IO8", GAL16V8[12].index());
+Y(Pin_IO7, "IO7", GAL16V8[13].index());
+Y(Pin_IO6, "IO6", GAL16V8[14].index());
+Y(Pin_IO5, "IO5", GAL16V8[15].index());
+Y(Pin_IO4, "IO4", GAL16V8[16].index());
+Y(Pin_IO3, "IO3", GAL16V8[17].index());
+Y(Pin_IO2, "IO2", GAL16V8[18].index());
+Y(Pin_IO1, "IO1", GAL16V8[19].index());
 Z(binaryConvertWord, "binary convert", "0b", 2);
 Z(fallback, "fallback numeric conversion (no prefix)", "", 0);
 #undef Z
@@ -990,24 +1006,24 @@ PureWord* lookupTable[] = {
     &outputWord,
     &lowWord,
     &highWord,
-    &P1,
-    &P2,
-    &P3,
-    &P4,
-    &P5,
-    &P6,
-    &P7,
-    &P8,
-    &P9,
-    &P11,
-    &P12,
-    &P13,
-    &P14,
-    &P15,
-    &P16,
-    &P17,
-    &P18,
-    &P19,
+    &Pin_I1, &Pin_CLK,
+    &Pin_I2,
+    &Pin_I3,
+    &Pin_I4,
+    &Pin_I5,
+    &Pin_I6,
+    &Pin_I7,
+    &Pin_I8,
+    &Pin_I9,
+    &Pin_I10, &Pin_OE,
+    &Pin_IO8,
+    &Pin_IO7,
+    &Pin_IO6,
+    &Pin_IO5,
+    &Pin_IO4,
+    &Pin_IO3,
+    &Pin_IO2,
+    &Pin_IO1,
     &binaryConvertWord,
     // must come last
     &fallback,
