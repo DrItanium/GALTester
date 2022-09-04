@@ -617,58 +617,12 @@ class PureWord {
         virtual bool invoke(const String& match) noexcept = 0;
         virtual String getName() const noexcept = 0;
 };
-class Word : public PureWord {
-    public:
-        Word(const String& name) : name_(name) { }
-        ~Word() override = default;
-        [[nodiscard]] virtual bool matches(const String& name) const noexcept override { return name == name_; }
-        String getName() const noexcept { return name_; }
 
-    private:
-        String name_;
-
-};
-class LambdaWord : public Word {
-    public:
-        using Parent = Word;
-#ifdef __AVR__
-        using Function = bool (*)(const String&);
-#else
-        using Function = std::function<bool(const String&)>;
-#endif
-        explicit LambdaWord(const String& name, Function theFunction) : Parent(name), func_(theFunction)  { }
-        ~LambdaWord() override = default;
-        bool invoke(const String& match) noexcept override {
-            return func_(match);
-        }
-    private:
-        Function func_;
-};
-constexpr auto MaxNumberOfWords = 64;
-extern PureWord* lookupTable[MaxNumberOfWords];
-bool
-listWords(const String&) noexcept {
-    Serial.println(F("Registered Words:"));
-    int count = 0;
-    for (auto* word : lookupTable) {
-        if (word) {
-            Serial.print(F("- "));
-            Serial.println(word->getName());
-            ++count;
-        }
-    }
-    Serial.println();
-    Serial.print(F("Found "));
-    Serial.print(count);
-    Serial.println(F(" words in dictionary"));
-    Serial.println();
-    return true;
-}
-bool
-displayPinout(const String&) noexcept {
-    iface.printPinStates(Serial);
-    return true;
-}
+extern PureWord* lookupTable[];
+bool listWords(const String&) noexcept;
+bool displayPinout(const String&) noexcept;
+bool displayRegisters(const String&) noexcept;
+PureWord* findWord(const String&) noexcept;
 void 
 GALInterface::displayRegisters() const noexcept {
     Serial.println(F("GAL Interface Registers"));
@@ -676,21 +630,6 @@ GALInterface::displayRegisters() const noexcept {
     Serial.println(static_cast<byte>(~ioPinConfiguration_), BIN);
     Serial.print(F("Input values: 0b"));
     Serial.println(inputPinState_.getMaskedState(), BIN);
-}
-bool
-displayRegisters(const String&) noexcept {
-    iface.displayRegisters();
-    return true;
-}
-
-
-PureWord* findWord(const String& word) noexcept {
-    for (auto* theWord: lookupTable) {
-        if (theWord && theWord->matches(word)) {
-            return theWord;
-        }
-    }
-    return nullptr;
 }
 enum class ErrorCodes {
     None,
@@ -1004,12 +943,13 @@ class PureLambdaWord : public PureWord {
             base)
 X(words, "words", listWords);
 X(dot, ".", popAndPrintStackTop);
-X(dotStack, ".s", popAndPrintStackTop);
+X(dotStack, ".s", printStackContents);
 X(ioPinMode, "io-pin-mode", setIOPinMode);
 X(setInput, "set-input", setInputPinValue);
 X(pinsOp, "pins", displayPinout);
 X(statusOp, "status", displayRegisters);
 X(doPermutationsOp, "do-permutations", runThroughAllPermutations);
+X(clearStackWord, "clear", [](const String&) { clearStack(); return true; });
 Y(inputWord, "input", INPUT);
 Y(outputWord, "output", OUTPUT);
 Y(lowWord, "low", LOW);
@@ -1046,6 +986,8 @@ PureWord* lookupTable[] = {
     &pinsOp,
     &statusOp,
     &doPermutationsOp,
+    &clearStackWord,
+    // constants
     &inputWord,
     &outputWord,
     &lowWord,
@@ -1072,7 +1014,7 @@ PureWord* lookupTable[] = {
     // must come last
     &fallback,
 };
-constexpr auto lookupTableCount = sizeof(lookupTable)/sizeof(Word*);
+constexpr auto lookupTableCount = sizeof(lookupTable)/sizeof(PureWord*);
 
 String inputString = "";         // a String to hold incoming data
 bool stringComplete = false;  // whether the string is complete
@@ -1334,3 +1276,32 @@ runThroughAllPermutations(const String&) noexcept {
     return sdEnabled;
 }
 
+bool
+listWords(const String&) noexcept {
+    for (auto* word : lookupTable) {
+        if (word) {
+            Serial.println(word->getName());
+        }
+    }
+    return true;
+}
+bool
+displayPinout(const String&) noexcept {
+    iface.printPinStates(Serial);
+    return true;
+}
+bool
+displayRegisters(const String&) noexcept {
+    iface.displayRegisters();
+    return true;
+}
+
+
+PureWord* findWord(const String& word) noexcept {
+    for (auto* theWord: lookupTable) {
+        if (theWord && theWord->matches(word)) {
+            return theWord;
+        }
+    }
+    return nullptr;
+}
