@@ -581,13 +581,13 @@ eval(const String& word) noexcept {
         }
     }
 }
-struct TreatAsBoolean { };
+template<typename T> struct TreatAs { };
+using TreatAsBoolean = TreatAs<bool>;
 bool pushItemOntoStack(int32_t value) noexcept;
 bool pushItemOntoStack(bool value, TreatAsBoolean) noexcept { return pushItemOntoStack(value ? 0xFFFF'FFFF : 0); }
-template<int32_t constant>
-bool pushItemOntoStack(const String&) noexcept { 
-    return pushItemOntoStack(constant);
-}
+bool pushItemOntoStack(volatile bool value, TreatAs<volatile bool>) noexcept { return pushItemOntoStack(static_cast<bool>(value), TreatAsBoolean{}); }
+bool pushItemOntoStack(int32_t value, TreatAs<int32_t>) noexcept { return pushItemOntoStack(value); }
+bool pushItemOntoStack(int value, TreatAs<int>) noexcept { return pushItemOntoStack(value); }
 bool expectedNumberOfItemsOnStack(byte numberOfItems) noexcept;
 bool popItemOffStack(int32_t& item) noexcept;
 bool dropTopOfStack() noexcept;
@@ -805,17 +805,13 @@ bool orTwoNumbers(const String&) noexcept;
 bool andTwoNumbers(const String&) noexcept;
 bool xorTwoNumbers(const String&) noexcept;
 bool depth(const String&) noexcept;
-bool twoNumbersEqual(const String&) noexcept;
-bool twoNumbersNotEqual(const String&) noexcept;
-bool topGreaterThanLower(const String&) noexcept;
-bool topLessThanLower(const String&) noexcept;
-bool topGreaterThanOrEqualLower(const String&) noexcept;
-bool topLessThanOrEqualLower(const String&) noexcept;
 bool duplicateTop(const String&) noexcept;
 bool setIOPinMode(const String&) noexcept;
 bool setInputPinValue(const String&) noexcept;
 bool swapStackElements(const String&) noexcept;
 bool runThroughAllPermutations(const String&) noexcept;
+bool invertBits(const String&) noexcept;
+//bool extractBit(const String&) noexcept;
 class PureLambdaWord : public PureWord {
     public:
         using FunctionBody = bool(*)(const String&);
@@ -834,7 +830,9 @@ class PureLambdaWord : public PureWord {
 #define X(name, str, fn) \
     PROGMEM const char name ## _String [] = str ; \
     PureLambdaWord name(reinterpret_cast<const __FlashStringHelper*>(name ## _String), fn) 
-#define Y(name, str, value) X(name, str, pushItemOntoStack<value>)
+#define Y(name, str, value) \
+    bool name ## _Function (const String&) noexcept { return pushItemOntoStack(value, TreatAs<decltype(value)> {}); } \
+    X(name, str, name ## _Function )
 #define Z(name, str, pfix, base) \
     PROGMEM const char name ## _String0 [] = str; \
     PROGMEM const char name ## _String1 [] = pfix; \
@@ -877,6 +875,29 @@ Y(Pin_IO2, "IO2", GAL16V8[17].zeroIndex());
 Y(Pin_IO1, "IO1", GAL16V8[18].zeroIndex());
 Z(binaryConvertWord, "binary convert", "0b", 2);
 Z(fallback, "fallback numeric conversion (no prefix)", "", 0);
+Y(hasSDCardWord, "sd?", sdEnabled);
+//X(extractBitWord, "extract", extractBit);
+X(addTwo, "+", addTwoNumbers);
+X(subTwo, "-", subtractTwoNumbers);
+X(mulTwo, "*", multiplyTwoNumbers);
+X(divTwo, "div", divideTwoNumbers);
+X(modTwo, "mod", moduloTwoNumbers);
+X(orTwo, "or", orTwoNumbers);
+X(andTwo, "and", andTwoNumbers);
+X(xorTwo, "xor", xorTwoNumbers);
+X(invert, "not", invertBits);
+bool twoNumbersEqual(const String&) noexcept;
+bool twoNumbersNotEqual(const String&) noexcept;
+bool topGreaterThanLower(const String&) noexcept;
+bool topLessThanLower(const String&) noexcept;
+bool topGreaterThanOrEqualLower(const String&) noexcept;
+bool topLessThanOrEqualLower(const String&) noexcept;
+X(equalTwo, "=", twoNumbersEqual);
+X(notEqualTwo, "<>", twoNumbersNotEqual);
+X(greaterThanTwo, "<", topGreaterThanLower);
+X(lessThanTwo, ">", topLessThanLower);
+X(greaterThanEqualTwo, "<=", topGreaterThanOrEqualLower);
+X(lessThanEqualTwo, ">=", topLessThanOrEqualLower);
 #undef Z
 #undef Y
 #undef X
@@ -891,6 +912,24 @@ PureWord* lookupTable[] = {
     &doPermutationsOp,
     &clearStackWord,
     &depthWord,
+    // arithmetic operators
+    &addTwo,
+    &subTwo,
+    &mulTwo,
+    &divTwo,
+    &modTwo,
+    // logical operators
+    &orTwo,
+    &andTwo,
+    &xorTwo,
+    &invert,
+    // comparison operators
+    &equalTwo,
+    &notEqualTwo,
+    &greaterThanTwo,
+    &lessThanTwo,
+    &greaterThanEqualTwo,
+    &lessThanEqualTwo,
     // constants
     &inputWord,
     &outputWord,
@@ -914,6 +953,8 @@ PureWord* lookupTable[] = {
     &Pin_IO3,
     &Pin_IO2,
     &Pin_IO1,
+    &hasSDCardWord,
+    //&extractBitWord,
     &binaryConvertWord,
     // must come last
     &fallback,
@@ -1208,4 +1249,12 @@ PureWord* findWord(const String& word) noexcept {
         }
     }
     return nullptr;
+}
+bool invertBits(const String&) noexcept {
+    if (expectedNumberOfItemsOnStack(1)) {
+        auto top = theStack[stackPosition];
+        theStack[stackPosition] = ~top;
+        return true;
+    }
+    return false;
 }
