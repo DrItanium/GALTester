@@ -616,15 +616,17 @@ void loop() {
 class PureWord {
     public:
         virtual ~PureWord() = default;
-        [[nodiscard]] virtual bool matches(const String& name) const noexcept { return name == getName(); }
+        [[nodiscard]] virtual bool matches(const String& name) const noexcept = 0;
         virtual bool invoke(const String& match) noexcept = 0;
-        virtual const String& getName() const noexcept = 0;
+        virtual String getName() const noexcept = 0;
 };
 class Word : public PureWord {
     public:
         Word(const String& name) : name_(name) { }
         ~Word() override = default;
-        const String& getName() const noexcept override { return name_; }
+        [[nodiscard]] virtual bool matches(const String& name) const noexcept override { return name == name_; }
+        String getName() const noexcept { return name_; }
+
     private:
         String name_;
 
@@ -646,7 +648,7 @@ class LambdaWord : public Word {
         Function func_;
 };
 constexpr auto MaxNumberOfWords = 64;
-extern Word* lookupTable[MaxNumberOfWords];
+extern PureWord* lookupTable[MaxNumberOfWords];
 bool
 listWords(const String&) noexcept {
     Serial.println(F("Registered Words:"));
@@ -685,7 +687,7 @@ displayRegisters(const String&) noexcept {
 }
 
 
-Word* findWord(const String& word) noexcept {
+PureWord* findWord(const String& word) noexcept {
     for (auto* theWord: lookupTable) {
         if (theWord && theWord->matches(word)) {
             return theWord;
@@ -974,6 +976,39 @@ bool setIOPinMode(const String&) noexcept;
 bool setInputPinValue(const String&) noexcept;
 bool swapStackElements(const String&) noexcept;
 bool runThroughAllPermutations(const String&) noexcept;
+template<int32_t value>
+class PushNumberOntoStack : public PureWord {
+    public:
+        PushNumberOntoStack(const __FlashStringHelper* name) : name_(name) { }
+        ~PushNumberOntoStack() override = default;
+        [[nodiscard]] bool matches(const String& name) const noexcept override {
+            // unpack when we need it
+            return name == name_;
+        }
+        bool invoke(const String&) noexcept override {
+            return pushItemOntoStack(value);
+        }
+        String getName() const noexcept override { return name_; }
+    private:
+        const __FlashStringHelper* name_;
+};
+
+template<bool value>
+class PushBooleanOntoStack : public PureWord {
+    public:
+        PushBooleanOntoStack(const __FlashStringHelper* name) : name_(name) { }
+        ~PushBooleanOntoStack() override = default;
+        [[nodiscard]] bool matches(const String& name) const noexcept override {
+            // unpack when we need it
+            return name == name_;
+        }
+        bool invoke(const String&) noexcept override {
+            return pushItemOntoStack(value, TreatAsBoolean{});
+        }
+        String getName() const noexcept override { return name_; }
+    private:
+        const __FlashStringHelper* name_;
+};
 
 LambdaWord words("words", listWords);
 LambdaWord dot(".", popAndPrintStackTop);
@@ -983,7 +1018,10 @@ LambdaWord setInput("set-input", setInputPinValue);
 LambdaWord pinsOp("pins", displayPinout);
 LambdaWord statusOp("status", displayRegisters);
 LambdaWord doPermutationsOp("do-permutations", runThroughAllPermutations);
-#define X(name, str, target) LambdaWord name(str, pushItemOntoStack<target>)
+#define X(name, str, target) \
+    PROGMEM const char name ## _String [] = str ; \
+    PushNumberOntoStack<target> name(reinterpret_cast<const __FlashStringHelper*>(name ## _String))
+
 X(inputWord, "input", INPUT);
 X(outputWord, "output", OUTPUT);
 X(lowWord, "low", LOW);
@@ -1009,7 +1047,7 @@ X(P19, "P19", 17);
 #undef X
 NumericBaseCapture binaryConvertWord("binary convert", "0b", 2);
 NumericBaseCapture fallback("last word", "", 0);
-Word* lookupTable[] = { 
+PureWord* lookupTable[] = { 
     &words,
     &dot,
     &dotStack, 
