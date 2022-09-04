@@ -515,15 +515,15 @@ class PureWord {
     public:
         virtual ~PureWord() = default;
         [[nodiscard]] virtual bool matches(const String& name) const noexcept = 0;
-        virtual bool invoke(const String& match) noexcept = 0;
+        virtual bool invoke(const String& match) const noexcept = 0;
         virtual String getName() const noexcept = 0;
 };
 
-extern PureWord* lookupTable[];
+extern const PureWord* lookupTable[];
 bool listWords(const String&) noexcept;
 bool displayPinout(const String&) noexcept;
 bool displayRegisters(const String&) noexcept;
-PureWord* findWord(const String&) noexcept;
+const PureWord* findWord(const String&) noexcept;
 void 
 GALInterface::displayRegisters() const noexcept {
     Serial.println(F("GAL Interface Registers"));
@@ -713,11 +713,11 @@ class InvokeOnPrefixMatchWord : public PureWord {
         InvokeOnPrefixMatchWord(const __FlashStringHelper* name, const __FlashStringHelper* prefix) : name_(name), prefix_(prefix) { }
         ~InvokeOnPrefixMatchWord() override = default;
         bool matches(const String& message) const noexcept override;
-        bool invoke(const String& match) noexcept override;
+        bool invoke(const String& match) const noexcept override;
         String getName() const noexcept override { return name_; }
         String getPrefix() const noexcept { return prefix_; }
     protected:
-        virtual bool invoke0(const String& substringMatch) noexcept = 0;
+        virtual bool invoke0(const String& substringMatch) const noexcept = 0;
     private:
         const __FlashStringHelper* name_;
         const __FlashStringHelper* prefix_;
@@ -731,7 +731,7 @@ InvokeOnPrefixMatchWord::matches(const String& word) const noexcept {
     }
 }
 bool
-InvokeOnPrefixMatchWord::invoke(const String& match) noexcept {
+InvokeOnPrefixMatchWord::invoke(const String& match) const noexcept {
     // if we got here then it is safe to strip the prefix off
     auto substring = match.substring(getPrefix().length());
     substring.trim();
@@ -742,12 +742,12 @@ class ParseNumberAndPushOntoStack : public InvokeOnPrefixMatchWord {
         ParseNumberAndPushOntoStack(const __FlashStringHelper* name, const __FlashStringHelper* prefix) : InvokeOnPrefixMatchWord(name, prefix) { }
         ~ParseNumberAndPushOntoStack() override = default;
     protected:
-        bool invoke0(const String& substringMatch) noexcept override;
-        virtual bool parse(const String& theValue, int32_t& number) noexcept = 0;
+        bool invoke0(const String& substringMatch) const noexcept override;
+        virtual bool parse(const String& theValue, int32_t& number) const noexcept = 0;
 };
 
 bool
-ParseNumberAndPushOntoStack::invoke0(const String& match) noexcept {
+ParseNumberAndPushOntoStack::invoke0(const String& match) const noexcept {
     int32_t value = 0;
     if (parse(match, value)) {
         return pushItemOntoStack(value);
@@ -760,13 +760,13 @@ class NumericBaseCapture : public ParseNumberAndPushOntoStack {
     public:
         NumericBaseCapture(const __FlashStringHelper* name, const __FlashStringHelper* prefix, int numericBase) : ParseNumberAndPushOntoStack(name, prefix), base_(numericBase) { }
     protected:
-        bool parse(const String& theValue, int32_t& number) noexcept override;
+        bool parse(const String& theValue, int32_t& number) const noexcept override;
     private:
         int base_;
 
 };
 bool
-NumericBaseCapture::parse(const String& theValue, int32_t& result) noexcept {
+NumericBaseCapture::parse(const String& theValue, int32_t& result) const noexcept {
     char* firstBad = nullptr;
     auto theStr = theValue.c_str();
     auto number = strtol(theStr, &firstBad, base_); 
@@ -824,7 +824,7 @@ class PureLambdaWord : public PureWord {
             return name == name_;
         }
         String getName() const noexcept override { return name_; }
-        bool invoke(const String& str) noexcept override { return value_(str); }
+        bool invoke(const String& str) const noexcept override { return value_(str); }
     private:
         const __FlashStringHelper* name_;
         FunctionBody value_;
@@ -832,14 +832,14 @@ class PureLambdaWord : public PureWord {
 
 #define X(name, str, fn) \
     PROGMEM const char name ## _String [] = str ; \
-    PureLambdaWord name(reinterpret_cast<const __FlashStringHelper*>(name ## _String), fn) 
+    const PureLambdaWord name(reinterpret_cast<const __FlashStringHelper*>(name ## _String), fn) 
 #define Y(name, str, value) \
     bool name ## _Function (const String&) noexcept { return pushItemOntoStack(value, TreatAs<decltype(value)> {}); } \
     X(name, str, name ## _Function )
 #define Z(name, str, pfix, base) \
     PROGMEM const char name ## _String0 [] = str; \
     PROGMEM const char name ## _String1 [] = pfix; \
-    NumericBaseCapture name ( \
+    const NumericBaseCapture name ( \
             reinterpret_cast<const __FlashStringHelper*>(name ## _String0), \
             reinterpret_cast<const __FlashStringHelper*>(name ## _String1), \
             base)
@@ -904,7 +904,7 @@ X(lessThanEqualTwo, ">=", topLessThanOrEqualLower);
 #undef Z
 #undef Y
 #undef X
-PureWord* lookupTable[] = { 
+const PureWord* lookupTable[] = { 
     &words,
     &dot,
     &dotStack, 
@@ -962,7 +962,7 @@ PureWord* lookupTable[] = {
     // must come last
     &fallback,
 };
-constexpr auto lookupTableCount = sizeof(lookupTable)/sizeof(PureWord*);
+constexpr auto lookupTableCount = sizeof(lookupTable)/sizeof(const PureWord*);
 
 String inputString = "";         // a String to hold incoming data
 bool stringComplete = false;  // whether the string is complete
@@ -1245,7 +1245,7 @@ displayRegisters(const String&) noexcept {
 }
 
 
-PureWord* findWord(const String& word) noexcept {
+const PureWord* findWord(const String& word) noexcept {
     for (auto* theWord: lookupTable) {
         if (theWord && theWord->matches(word)) {
             return theWord;
