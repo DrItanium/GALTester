@@ -22,7 +22,7 @@
  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
+#include "BoardTarget.h"
 #include <Arduino.h>
 #include <SPI.h>
 #include <SD.h>
@@ -30,16 +30,12 @@
 #include <avr/pgmspace.h>
 #endif
 #include <Wire.h>
-#ifndef __AVR__
-#include <functional>
-#endif
-constexpr auto CS = A0;
-constexpr auto RESET_IOEXP = A2;
-constexpr auto IOEXP_INT = 2;
-constexpr auto I9 = A1;
-constexpr auto I1_CLK = 5;
-constexpr auto CardDetect = -1;
-constexpr auto SDSelect = 4;
+constexpr auto CS = getCSPin();
+constexpr auto RESET_IOEXP = getIOEXPResetPin();
+constexpr auto I9 = getI9Pin();
+constexpr auto IOEXP_INT = getIOEXPIntPin();
+constexpr auto I1_CLK = getI1CLKPin();
+constexpr auto SDSelect = getSDCardPin();
 
 
 
@@ -950,6 +946,7 @@ X(pinsOp, "pins", displayPinout);
 X(statusOp, "status", displayRegisters);
 X(doPermutationsOp, "do-permutations", runThroughAllPermutations);
 X(clearStackWord, "clear", [](const String&) { clearStack(); return true; });
+X(depthWord, "depth", depth);
 Y(inputWord, "input", INPUT);
 Y(outputWord, "output", OUTPUT);
 Y(lowWord, "low", LOW);
@@ -987,6 +984,7 @@ PureWord* lookupTable[] = {
     &statusOp,
     &doPermutationsOp,
     &clearStackWord,
+    &depthWord,
     // constants
     &inputWord,
     &outputWord,

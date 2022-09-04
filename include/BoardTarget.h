@@ -25,4 +25,32 @@
 
 #ifndef GAL_TESTER_BOARD_TARGET_H__
 #define GAL_TESTER_BOARD_TARGET_H__
+#include <Arduino.h>
+constexpr auto getSDCardPin() noexcept {
+#ifdef ARDUINO_METRO_ESP32S2
+    return 9;
+#elif defined(ARDUINO_GRAND_CENTRAL_M4)
+    return SDCARD_SS_PIN;
+#else
+    return 4;
+#endif
+}
+
+constexpr auto getI1CLKPin() noexcept {
+#ifdef ARDUINO_METRO_ESP32S2
+    return 10;
+#else
+    return 4;
+#endif
+}
+constexpr auto getIOEXPIntPin() noexcept {
+#ifdef ARDUINO_METRO_ESP32S2
+    return 7;
+#else
+    return 2;
+#endif
+}
+constexpr auto getCSPin() noexcept { return A0; }
+constexpr auto getI9Pin() noexcept { return A1; }
+constexpr auto getIOEXPResetPin() noexcept { return A2; }
 #endif
