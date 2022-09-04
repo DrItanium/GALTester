@@ -69,11 +69,12 @@ class GALPinDescription {
         constexpr auto index() const noexcept { return index_; }
         constexpr auto mask() const noexcept { return mask_; }
         constexpr auto valid() const noexcept { return states_ != ValidStates::None; }
-        constexpr auto clockPin() const noexcept { return (states_ | ValidStates::Clock) != 0; }
-        constexpr auto outputEnablePin() const noexcept { return (states_ | ValidStates::OutputEnable) != 0; }
-        constexpr auto inputPin() const noexcept { return (states_ | ValidStates::Input) != 0; }
-        constexpr auto outputPin() const noexcept { return (states_ | ValidStates::Output) != 0; }
+        constexpr auto clockPin() const noexcept { return (states_ & ValidStates::Clock) != 0; }
+        constexpr auto outputEnablePin() const noexcept { return (states_ & ValidStates::OutputEnable) != 0; }
+        constexpr auto inputPin() const noexcept { return (states_ & ValidStates::Input) != 0; }
+        constexpr auto outputPin() const noexcept { return (states_ & ValidStates::Output) != 0; }
         constexpr auto inputOnlyPin() const noexcept { return inputPin() && !outputPin(); }
+        constexpr auto ioPin() const noexcept { return inputPin() && outputPin(); }
         constexpr operator bool() const noexcept { return valid(); }
     private:
         int index_;
@@ -92,6 +93,7 @@ static constexpr GALPinDescription GAL16V8[20] {
     GALPinDescription { 9, _BV(0), GALPinDescription::ValidStates::Input },
     GALPinDescription { 10 }, // GND
     GALPinDescription { 11, _BV(0), GALPinDescription::ValidStates::OutputEnable_Input },
+
     GALPinDescription { 12, _BV(7), GALPinDescription::ValidStates::Input_Output },
     GALPinDescription { 13, _BV(6), GALPinDescription::ValidStates::Input_Output },
     GALPinDescription { 14, _BV(5), GALPinDescription::ValidStates::Input_Output },
@@ -102,6 +104,8 @@ static constexpr GALPinDescription GAL16V8[20] {
     GALPinDescription { 19, _BV(0), GALPinDescription::ValidStates::Input_Output },
     GALPinDescription { 20 }, // VCC
 };
+static_assert(GAL16V8[10].outputEnablePin());
+static_assert(GAL16V8[11].ioPin());
 class GALInterface {
         static constexpr byte generateReadOpcode(IOExpanderAddress addr) noexcept { return 0b0100'0001 | static_cast<uint8_t>(addr); }
         static constexpr byte generateWriteOpcode(IOExpanderAddress addr) noexcept { return 0b0100'0000 | static_cast<uint8_t>(addr); }
@@ -247,7 +251,7 @@ class GALInterface {
          * configuring the MCP23S17.
          */
         void configureIOPins(uint8_t pattern) noexcept;
-        void configureIOPin(int32_t pin, int mode) noexcept;
+        void configureIOPin(const GALPinDescription& pin, int mode) noexcept;
         uint8_t getIOPinConfiguration() const noexcept { return ioPinConfiguration_; }
         uint8_t readOutputs() const noexcept;
         void setInputs(uint32_t pattern) noexcept;
@@ -256,7 +260,6 @@ class GALInterface {
         bool clockPinIsDigitalInput() const noexcept { return clockFrequency_ == 0; }
         constexpr auto getClockFrequency() const noexcept { return clockFrequency_; }
         void setInput(int pin, bool state) noexcept;
-        bool getInputState(int pin) const noexcept;
         bool getInputState(const GALPinDescription& desc) const noexcept;
     private:
         template<typename T>
@@ -287,7 +290,6 @@ class GALInterface {
             auto sample = readOutputs();
             thing.println(F("Pin states as seen from the perspective of the gal"));
             for (const auto& pin : GAL16V8) {
-                if (pin) {
                     printPinId(thing, pin.index());
                     if (pin.clockPin()) {
                         if (clockPinIsDigitalInput()) {
@@ -303,25 +305,25 @@ class GALInterface {
                     } else if (pin.inputOnlyPin()) {
                         thing.print(F("I ("));
                         printSingleHighLowInput(thing, pin);
-                    } else if (pin.outputPin()) {
+                    } else if (pin.ioPin()) {
                         if (isInputPin(pin)) {
                             thing.print(F("I ("));
                             printSingleHighLowInput(thing, pin);
                         } else {
-
                             auto bit = sample & pin.mask();
+                            Serial.print(F("\tbit: 0b"));
+                            Serial.println(bit, BIN);
                             thing.print(F("O ("));
                             printSingleHighLow(thing, bit);
                         }
+                    } else {
+                        thing.print(F("U ("));
                     }
                     thing.println(F(")"));
-                }
             }
         }
-        bool isOutputPin(int pin) const noexcept;
-        bool isInputPin(int pin) const noexcept;
+        bool isInputPin(const GALPinDescription& pin) const noexcept;
         void displayRegisters() const noexcept;
-        bool isIOPin(int pin) const noexcept;
     private:
         uint8_t cs_;
         uint8_t oe_;
@@ -349,31 +351,21 @@ GALInterface::GALInterface(byte chipSelect, byte oe, byte clk, byte reset, byte 
 
 }
 void 
-GALInterface::configureIOPin(int32_t pin, int mode) noexcept {
-    static constexpr byte lookupTable[8] {
-        7, // 10
-        6, // 11
-        5, // 12
-        4, // 13
-        3, // 14
-        2, // 15
-        1, // 16
-        0, // 17
-    };
-    if (isIOPin(pin)) {
+GALInterface::configureIOPin(const GALPinDescription& pin, int mode) noexcept {
+    if (pin.ioPin()) {
         switch (auto temporary = ioPinConfiguration_; mode) {
             case INPUT:
                 /// @todo disable pullups
-                temporary |= (1 << lookupTable[pin - 10]);
+                temporary |= pin.mask();
                 configureIOPins(temporary);
                 break;
             case OUTPUT:
-                temporary &= ~(1 << lookupTable[pin - 10]);
+                temporary &= ~(pin.mask());
                 configureIOPins(temporary);
                 break;
             case INPUT_PULLUP:
                 /// @todo configure pullups
-                temporary |= (1 << lookupTable[pin - 10]);
+                temporary |= (pin.mask());
                 configureIOPins(temporary);
                 break;
             default:
@@ -381,40 +373,10 @@ GALInterface::configureIOPin(int32_t pin, int mode) noexcept {
         }
     }
 }
-bool
-GALInterface::isIOPin(int pin) const noexcept {
-    return pin >= 10 && pin <= 17;
-}
-bool
-GALInterface::isOutputPin(int pin) const noexcept {
-    uint8_t inverse = ~ioPinConfiguration_;
-    switch (pin) {
-        case 17: return ((inverse) & static_cast<uint8_t>(1 << 0)) == 1;
-        case 16: return ((inverse) & static_cast<uint8_t>(1 << 1)) == 1;
-        case 15: return ((inverse) & static_cast<uint8_t>(1 << 2)) == 1;
-        case 14: return ((inverse) & static_cast<uint8_t>(1 << 3)) == 1;
-        case 13: return ((inverse) & static_cast<uint8_t>(1 << 4)) == 1;
-        case 12: return ((inverse) & static_cast<uint8_t>(1 << 5)) == 1;
-        case 11: return ((inverse) & static_cast<uint8_t>(1 << 6)) == 1;
-        case 10: return ((inverse) & static_cast<uint8_t>(1 << 7)) == 1;
-        default: return false;
-    }
-}
 
 bool
-GALInterface::isInputPin(int pin) const noexcept {
-    uint8_t inverse = ~ioPinConfiguration_;
-    switch (pin) {
-        case 17: return ((inverse) & static_cast<uint8_t>(1 << 0)) == 0;
-        case 16: return ((inverse) & static_cast<uint8_t>(1 << 1)) == 0;
-        case 15: return ((inverse) & static_cast<uint8_t>(1 << 2)) == 0;
-        case 14: return ((inverse) & static_cast<uint8_t>(1 << 3)) == 0;
-        case 13: return ((inverse) & static_cast<uint8_t>(1 << 4)) == 0;
-        case 12: return ((inverse) & static_cast<uint8_t>(1 << 5)) == 0;
-        case 11: return ((inverse) & static_cast<uint8_t>(1 << 6)) == 0;
-        case 10: return ((inverse) & static_cast<uint8_t>(1 << 7)) == 0;
-        default: return true;
-    }
+GALInterface::isInputPin(const GALPinDescription& pin) const noexcept {
+    return pin.valid() && (pin.inputOnlyPin() || ((static_cast<uint8_t>(~ioPinConfiguration_) & static_cast<uint8_t>(pin.mask())) == 0));
 }
 
 uint8_t
@@ -426,7 +388,7 @@ GALInterface::configureIOPins(uint8_t pattern) noexcept {
     ioPinConfiguration_ = pattern;
     // invert the bits since we want inputs _TO_ the GAL being an output and 
     // outputs _FROM_ the gal being inputs to the chip
-    write8(MCP23x17Registers::IODIRB, ~ioPinConfiguration_);
+    write8(MCP23x17Registers::IODIRB, static_cast<uint8_t>(~ioPinConfiguration_));
 }
 void
 GALInterface::setClockFrequency(int freq) noexcept {
@@ -438,52 +400,23 @@ GALInterface::setClockFrequency(int freq) noexcept {
     }
 }
 void
-GALInterface::setInput(int pin, bool state) noexcept {
-    auto setInputPinValue = [this, theMask = static_cast<uint8_t>(1 << (pin - 1))](bool state) {
+GALInterface::setInput(int k, bool state) noexcept {
+    if (auto& pin = GAL16V8[k % 20]; pin.clockPin()) {
+        inputPinState_.bits.clkState = state;
+    } else if (pin.inputOnlyPin()) {
         if (state) {
-            //set the pin
-            inputPinState_.bits.inputs |= theMask;
+            inputPinState_.bits.inputs |= pin.mask();
         } else {
-            // clear the pin
-            inputPinState_.bits.inputs &= ~theMask;
+            inputPinState_.bits.inputs &= static_cast<uint8_t>(~pin.mask());
         }
-    };
-    auto setOutputPinValue = [this, theMask = static_cast<uint8_t>(1 << (pin - 11))](bool state) {
+    } else if (pin.outputEnablePin()) {
+        inputPinState_.bits.oeState = state;
+    } else if (pin.ioPin()) {
         if (state) {
-            inputPinState_.bits.ioPins |= theMask;
+            inputPinState_.bits.ioPins |= pin.mask();
         } else {
-            inputPinState_.bits.ioPins &= ~theMask;
+            inputPinState_.bits.ioPins &= static_cast<uint8_t>(~pin.mask());
         }
-    };
-    switch (pin) {
-        case 0: 
-            inputPinState_.bits.clkState = state;
-            break;
-        case 1:
-        case 2:
-        case 3:
-        case 4:
-        case 5:
-        case 6:
-        case 7:
-        case 8:
-            setInputPinValue(state);
-            break;
-        case 9:
-            inputPinState_.bits.oeState = state;
-            break;
-        case 10:
-        case 11:
-        case 12:
-        case 13:
-        case 14:
-        case 15:
-        case 16:
-        case 17:
-            setOutputPinValue(state);
-            break;
-        default:
-            break;
     }
     updateInputs();
 }
@@ -516,49 +449,6 @@ GALInterface::getInputState(const GALPinDescription& pin) const noexcept {
         return false;
     }
 }
-bool
-GALInterface::getInputState(int pin) const noexcept {
-    switch (pin) {
-        case 0: 
-            return inputPinState_.bits.clkState;
-        case 8:
-            return inputPinState_.bits.inputs & 0b0000'0001;
-        case 7:
-            return inputPinState_.bits.inputs & 0b0000'0010;
-        case 6:
-            return inputPinState_.bits.inputs & 0b0000'0100;
-        case 5:
-            return inputPinState_.bits.inputs & 0b0000'1000;
-        case 4:
-            return inputPinState_.bits.inputs & 0b0001'0000;
-        case 3:
-            return inputPinState_.bits.inputs & 0b0010'0000;
-        case 2:
-            return inputPinState_.bits.inputs & 0b0100'0000;
-        case 1:
-            return inputPinState_.bits.inputs & 0b1000'0000;
-        case 9:
-            return inputPinState_.bits.oeState;
-        case 17:
-            return inputPinState_.bits.ioPins & 0b0000'0001;
-        case 16:
-            return inputPinState_.bits.ioPins & 0b0000'0010;
-        case 15:
-            return inputPinState_.bits.ioPins & 0b0000'0100;
-        case 14:
-            return inputPinState_.bits.ioPins & 0b0000'1000;
-        case 13:
-            return inputPinState_.bits.ioPins & 0b0001'0000;
-        case 12:
-            return inputPinState_.bits.ioPins & 0b0010'0000;
-        case 11:
-            return inputPinState_.bits.ioPins & 0b0100'0000;
-        case 10:
-            return inputPinState_.bits.ioPins & 0b1000'0000;
-        default:
-            return false;
-    }
-}
 
 void
 GALInterface::begin() noexcept {
@@ -589,7 +479,7 @@ void read() noexcept;
 void eval() noexcept;
 void 
 setup() {
-    Serial.begin(9600);
+    Serial.begin(115200);
     while (!Serial) {
         delay(100);
     }
@@ -975,16 +865,16 @@ Y(Pin_I6,  "I6",  GAL16V8[5].index());
 Y(Pin_I7,  "I7",  GAL16V8[6].index());
 Y(Pin_I8,  "I8",  GAL16V8[7].index());
 Y(Pin_I9,  "I9",  GAL16V8[8].index());
-Y(Pin_I10, "I10", GAL16V8[11].index()); Y(Pin_OE, "OE", GAL16V8[11].index());
+Y(Pin_I10, "I10", GAL16V8[10].index()); Y(Pin_OE, "OE", GAL16V8[10].index());
 
-Y(Pin_IO8, "IO8", GAL16V8[12].index());
-Y(Pin_IO7, "IO7", GAL16V8[13].index());
-Y(Pin_IO6, "IO6", GAL16V8[14].index());
-Y(Pin_IO5, "IO5", GAL16V8[15].index());
-Y(Pin_IO4, "IO4", GAL16V8[16].index());
-Y(Pin_IO3, "IO3", GAL16V8[17].index());
-Y(Pin_IO2, "IO2", GAL16V8[18].index());
-Y(Pin_IO1, "IO1", GAL16V8[19].index());
+Y(Pin_IO8, "IO8", GAL16V8[11].index());
+Y(Pin_IO7, "IO7", GAL16V8[12].index());
+Y(Pin_IO6, "IO6", GAL16V8[13].index());
+Y(Pin_IO5, "IO5", GAL16V8[14].index());
+Y(Pin_IO4, "IO4", GAL16V8[15].index());
+Y(Pin_IO3, "IO3", GAL16V8[16].index());
+Y(Pin_IO2, "IO2", GAL16V8[17].index());
+Y(Pin_IO1, "IO1", GAL16V8[18].index());
 Z(binaryConvertWord, "binary convert", "0b", 2);
 Z(fallback, "fallback numeric conversion (no prefix)", "", 0);
 #undef Z
@@ -1218,7 +1108,7 @@ setIOPinMode(const String&) noexcept {
     popItemOffStack(mode);
     // assume that targetPin is actually subtracted by one
     popItemOffStack(targetPin);
-    iface.configureIOPin(targetPin, mode);
+    iface.configureIOPin(GAL16V8[targetPin%20], mode);
     return true;
 }
 bool
