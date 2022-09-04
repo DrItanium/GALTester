@@ -594,18 +594,8 @@ setup() {
     iface.configureIOPins(0);
     pinMode(SDSelect, OUTPUT);
     digitalWrite(SDSelect, HIGH);
-    if constexpr (CardDetect != -1) {
-        pinMode(CardDetect, INPUT);
-    }
     Serial.println(F("Checking for an SD Card..."));
     if (!SD.begin(SDSelect)) {
-        if constexpr (CardDetect != -1) {
-            if (digitalRead(CardDetect) == HIGH) {
-                Serial.println(F("SD CARD FOUND BUT ERROR OCCURRED DURING INIT!"));
-            } else {
-                Serial.println(F("SD CARD NOT INSERTED"));
-            }
-        } 
         Serial.println(F("SD CARD NOT AVAILABLE!!!"));
     } else {
         sdEnabled = true;
@@ -618,21 +608,26 @@ setup() {
 void loop() {
     read();
     eval();
-    yield();
 }
 
 
 
 
-class Word {
+class PureWord {
     public:
-        explicit Word(const String& name) : name_(name) { }
-        virtual ~Word() = default;
-        [[nodiscard]] virtual bool matches(const String& name) const noexcept { return name == name_; }
+        virtual ~PureWord() = default;
+        [[nodiscard]] virtual bool matches(const String& name) const noexcept { return name == getName(); }
         virtual bool invoke(const String& match) noexcept = 0;
-        const String& getName() const noexcept { return name_; }
+        virtual const String& getName() const noexcept = 0;
+};
+class Word : public PureWord {
+    public:
+        Word(const String& name) : name_(name) { }
+        ~Word() override = default;
+        const String& getName() const noexcept override { return name_; }
     private:
         String name_;
+
 };
 class LambdaWord : public Word {
     public:
@@ -957,26 +952,6 @@ NumericBaseCapture::parse(const String& theValue, int32_t& result) noexcept {
     }
 }
 
-uint32_t lookupTableCount = 0;
-bool
-defineWord(Word* theWord) noexcept {
-    if (theWord && (lookupTableCount < MaxNumberOfWords)) {
-        lookupTable[lookupTableCount] = theWord;
-        ++lookupTableCount;
-        return true;
-    } 
-    return false;
-}
-bool
-defineWord(const String& name, LambdaWord::Function func) noexcept {
-    return defineWord(new LambdaWord(name, func));
-}
-template<typename T, typename ... Args>
-bool
-defineSpecialWord(const String& name, Args&& ... args) noexcept {
-    return defineWord(new T(name, args...));
-    // in here we want to describe the actions to perform
-}
 bool popAndPrintStackTop(const String&) noexcept;
 bool printStackContents(const String&) noexcept;
 bool addTwoNumbers(const String&) noexcept;
@@ -999,51 +974,81 @@ bool setIOPinMode(const String&) noexcept;
 bool setInputPinValue(const String&) noexcept;
 bool swapStackElements(const String&) noexcept;
 bool runThroughAllPermutations(const String&) noexcept;
+
+LambdaWord words("words", listWords);
+LambdaWord dot(".", popAndPrintStackTop);
+LambdaWord dotStack(".s", printStackContents);
+LambdaWord ioPinMode("io-pin-mode", setIOPinMode);
+LambdaWord setInput("set-input", setInputPinValue);
+LambdaWord pinsOp("pins", displayPinout);
+LambdaWord statusOp("status", displayRegisters);
+LambdaWord doPermutationsOp("do-permutations", runThroughAllPermutations);
+#define X(name, str, target) LambdaWord name(str, pushItemOntoStack<target>)
+X(inputWord, "input", INPUT);
+X(outputWord, "output", OUTPUT);
+X(lowWord, "low", LOW);
+X(highWord, "high", HIGH);
+X(P1, "P1", 0);
+X(P2, "P2", 1);
+X(P3, "P3", 2);
+X(P4, "P4", 3);
+X(P5, "P5", 4);
+X(P6, "P6", 5);
+X(P7, "P7", 6);
+X(P8, "P8", 7);
+X(P9, "P9", 8);
+X(P11, "P11", 9);
+X(P12, "P12", 10);
+X(P13, "P13", 11);
+X(P14, "P14", 12);
+X(P15, "P15", 13);
+X(P16, "P16", 14);
+X(P17, "P17", 15);
+X(P18, "P18", 16);
+X(P19, "P19", 17);
+#undef X
+NumericBaseCapture binaryConvertWord("binary convert", "0b", 2);
+NumericBaseCapture fallback("last word", "", 0);
+Word* lookupTable[] = { 
+    &words,
+    &dot,
+    &dotStack, 
+    &ioPinMode,
+    &setInput,
+    &pinsOp,
+    &statusOp,
+    &doPermutationsOp,
+    &inputWord,
+    &outputWord,
+    &lowWord,
+    &highWord,
+    &P1,
+    &P2,
+    &P3,
+    &P4,
+    &P5,
+    &P6,
+    &P7,
+    &P8,
+    &P9,
+    &P11,
+    &P12,
+    &P13,
+    &P14,
+    &P15,
+    &P16,
+    &P17,
+    &P18,
+    &P19,
+    &binaryConvertWord,
+    // must come last
+    &fallback,
+};
+constexpr auto lookupTableCount = sizeof(lookupTable)/sizeof(Word*);
 void
 setupLookupTable() noexcept {
-    defineWord(F("words"), listWords);
-    defineWord(F("."), popAndPrintStackTop);
-    defineWord(F(".s"), printStackContents);
-    // pin manipulators
-    defineWord(F("io-pin-mode"), setIOPinMode);
-    defineWord(F("set-input"), setInputPinValue);
-    defineWord(F("pins"), displayPinout);
-    defineWord(F("status"), displayRegisters);
-    defineWord(F("do-permutations"), runThroughAllPermutations);
-#define X(str, target) defineWord(F(str) , pushItemOntoStack<target>)
-    X("input", INPUT);
-    X("output", OUTPUT);
-    X("low", LOW);
-    X("high", HIGH);
-    X("P1", 0);
-    X("P2", 1);
-    X("P3", 2);
-    X("P4", 3);
-    X("P5", 4);
-    X("P6", 5);
-    X("P7", 6);
-    X("P8", 7);
-    X("P9", 8);
-    X("P11", 9);
-    X("P12", 10);
-    X("P13", 11);
-    X("P14", 12);
-    X("P15", 13);
-    X("P16", 14);
-    X("P17", 15);
-    X("P18", 16);
-    X("P19", 17);
-#undef X
 
-    defineSpecialWord<NumericBaseCapture>(F("binary convert"), F("0b"), 2);
-
-    // must come last
-    if (!defineSpecialWord<NumericBaseCapture>(F("last word"), F(""), 0)) {
-        Serial.println(F("TOO MANY WORDS DEFINED! HALTING!!"));
-        while (true);
-    }
 }
-Word* lookupTable[MaxNumberOfWords] = { 0 };
 
 String inputString = "";         // a String to hold incoming data
 bool stringComplete = false;  // whether the string is complete
