@@ -814,6 +814,12 @@ bool setInputPinValue(const String&) noexcept;
 bool swapStackElements(const String&) noexcept;
 bool runThroughAllPermutations(const String&) noexcept;
 bool invertBits(const String&) noexcept;
+bool twoNumbersEqual(const String&) noexcept;
+bool twoNumbersNotEqual(const String&) noexcept;
+bool topGreaterThanLower(const String&) noexcept;
+bool topLessThanLower(const String&) noexcept;
+bool topGreaterThanOrEqualLower(const String&) noexcept;
+bool topLessThanOrEqualLower(const String&) noexcept;
 //bool extractBit(const String&) noexcept;
 class PureLambdaWord : public PureWord {
     public:
@@ -889,12 +895,6 @@ X(orTwo, "or", orTwoNumbers);
 X(andTwo, "and", andTwoNumbers);
 X(xorTwo, "xor", xorTwoNumbers);
 X(invert, "not", invertBits);
-bool twoNumbersEqual(const String&) noexcept;
-bool twoNumbersNotEqual(const String&) noexcept;
-bool topGreaterThanLower(const String&) noexcept;
-bool topLessThanLower(const String&) noexcept;
-bool topGreaterThanOrEqualLower(const String&) noexcept;
-bool topLessThanOrEqualLower(const String&) noexcept;
 X(equalTwo, "=", twoNumbersEqual);
 X(notEqualTwo, "<>", twoNumbersNotEqual);
 X(greaterThanTwo, "<", topGreaterThanLower);

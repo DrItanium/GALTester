@@ -28,7 +28,7 @@
 #include <Arduino.h>
 constexpr auto getSDCardPin() noexcept {
 #ifdef ARDUINO_METRO_ESP32S2
-    return 9;
+    return 15;
 #elif defined(ARDUINO_GRAND_CENTRAL_M4)
     return SDCARD_SS_PIN;
 #else
