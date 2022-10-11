@@ -891,6 +891,7 @@ Z(binaryConvertWord, "binary convert", "0b", 2);
 Z(fallback, "fallback numeric conversion (no prefix)", "", 0);
 Y(hasSDCardWord, "sd?", sdEnabled);
 //X(extractBitWord, "extract", extractBit);
+#ifdef INCLUDE_ARITHMETIC_OPERATIONS
 X(addTwo, "+", addTwoNumbers);
 X(subTwo, "-", subtractTwoNumbers);
 X(mulTwo, "*", multiplyTwoNumbers);
@@ -906,6 +907,7 @@ X(greaterThanTwo, "<", topGreaterThanLower);
 X(lessThanTwo, ">", topLessThanLower);
 X(greaterThanEqualTwo, "<=", topGreaterThanOrEqualLower);
 X(lessThanEqualTwo, ">=", topLessThanOrEqualLower);
+#endif
 #undef Z
 #undef Y
 #undef X
@@ -920,6 +922,7 @@ const PureWord* lookupTable[] = {
     &doPermutationsOp,
     &clearStackWord,
     &depthWord,
+#ifdef INCLUDE_ARITHMETIC_OPERATIONS
     // arithmetic operators
     &addTwo,
     &subTwo,
@@ -938,6 +941,7 @@ const PureWord* lookupTable[] = {
     &lessThanTwo,
     &greaterThanEqualTwo,
     &lessThanEqualTwo,
+#endif
     // constants
     &inputWord,
     &outputWord,
