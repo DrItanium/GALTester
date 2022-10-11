@@ -31,10 +31,8 @@
 #include <avr/pgmspace.h>
 #endif
 #include <Wire.h>
-#include <ArduinoJson.h>
 RTC_PCF8523 rtc;
 
-const char *cfgPath = "/config.txt";  // <- SD library uses 8.3 filenames
 constexpr auto CS = getCSPin();
 constexpr auto RESET_IOEXP = getIOEXPResetPin();
 constexpr auto I9 = getI9Pin();
@@ -42,8 +40,6 @@ constexpr auto IOEXP_INT = getIOEXPIntPin();
 constexpr auto I1_CLK = getI1CLKPin();
 constexpr auto SDSelect = getSDCardPin();
 
-
-const char daysOfTheWeek[7][12] PROGMEM = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
 enum class IOExpanderAddress : byte {
     GAL_16V8_Element = 0b0000,
@@ -527,37 +523,16 @@ setup() {
         Serial.println(F("RTC FOUND!"));
         if (! rtc.initialized() || rtc.lostPower()) {
             Serial.println(F("RTC not initialized, fixing..."));
-            if (sdEnabled && SD.exists(cfgPath)) {
-                Serial.println(F("Restoring date and time from file on SDCard"));
-                if (File oldFile = SD.open(cfgPath, FILE_READ); oldFile) {
-                    StaticJsonDocument<512> doc;
-                    if (auto error = deserializeJson(doc, oldFile); error) {
-                        Serial.println(F("Failed to read file, using default configuration"));
-                        initRTCDateTime();
-                    } else {
-                        const char* stamp = doc["timestamp"];
-                        rtc.adjust(DateTime{stamp});
-                    }
-                    oldFile.close();
-                } else {
-                    initRTCDateTime();
-                }
-            } else {
-                initRTCDateTime();
-            }
-            Serial.println(F("Done setting up!"));
-        } 
+            initRTCDateTime();
+        }
         rtc.start();
-        // printout current date and time
-        DateTime now = rtc.now();
+        auto now = rtc.now();
         Serial.print(now.year(), DEC);
         Serial.print('/');
         Serial.print(now.month(), DEC);
         Serial.print('/');
         Serial.print(now.day(), DEC);
-        Serial.print(F(" ("));
-        Serial.print(daysOfTheWeek[now.dayOfTheWeek()]);
-        Serial.print(F(") "));
+        Serial.print(' ');
         Serial.print(now.hour(), DEC);
         Serial.print(':');
         Serial.print(now.minute(), DEC);
@@ -897,7 +872,6 @@ bool topLessThanLower(const String&) noexcept;
 bool topGreaterThanOrEqualLower(const String&) noexcept;
 bool topLessThanOrEqualLower(const String&) noexcept;
 //bool extractBit(const String&) noexcept;
-bool saveRTCValueToDisk(const String&) noexcept;
 class PureLambdaWord : public PureWord {
     public:
         using FunctionBody = bool(*)(const String&);
@@ -927,21 +901,24 @@ class PureLambdaWord : public PureWord {
             reinterpret_cast<const __FlashStringHelper*>(name ## _String1), \
             base)
 X(words, "words", listWords);
-X(dot, ".", popAndPrintStackTop);
-X(dotStack, ".s", printStackContents);
-X(ioPinMode, "io-pin-mode", setIOPinMode);
-X(setInput, "set-input", setInputPinValue);
 X(pinsOp, "pins", displayPinout);
 X(statusOp, "status", displayRegisters);
 X(doPermutationsOp, "do-permutations", runThroughAllPermutations);
-X(updateRTCConfig, "save-rtc", saveRTCValueToDisk);
-X(clearStackWord, "clear", [](const String&) { clearStack(); return true; });
-X(depthWord, "depth", depth);
+#ifdef TREAT_AS_FORTH_INTERPRETER
+X(dotStack, ".s", printStackContents);
+X(ioPinMode, "io-pin-mode", setIOPinMode);
 Y(inputWord, "input", INPUT);
 Y(outputWord, "output", OUTPUT);
 Y(lowWord, "low", LOW);
 Y(highWord, "high", HIGH);
-Y(Pin_I1,  "I1",  GAL16V8[0].zeroIndex()); Y(Pin_CLK, "CLK", GAL16V8[0].zeroIndex());
+X(setInput, "set-input", setInputPinValue);
+#else
+X(inputPin, "input-pin", [](const String& theStr) { return pushItemOntoStack(INPUT, TreatAs<decltype(INPUT)>{}) && setIOPinMode(theStr); });
+X(outputPin, "output-pin", [](const String& theStr) { return pushItemOntoStack(OUTPUT, TreatAs<decltype(OUTPUT)> {}) && setIOPinMode(theStr); });
+X(inputLow, "set-low", [](const String& theStr) { return pushItemOntoStack(LOW, TreatAs<decltype(LOW)>{}) && setInputPinValue(theStr); });
+X(inputHigh, "set-high", [](const String& theStr) { return pushItemOntoStack(HIGH, TreatAs<decltype(HIGH)> { }) && setInputPinValue(theStr); });
+#endif
+Y(Pin_I1,  "I1",  GAL16V8[0].zeroIndex()); 
 Y(Pin_I2,  "I2",  GAL16V8[1].zeroIndex());
 Y(Pin_I3,  "I3",  GAL16V8[2].zeroIndex());
 Y(Pin_I4,  "I4",  GAL16V8[3].zeroIndex());
@@ -951,7 +928,10 @@ Y(Pin_I7,  "I7",  GAL16V8[6].zeroIndex());
 Y(Pin_I8,  "I8",  GAL16V8[7].zeroIndex());
 Y(Pin_I9,  "I9",  GAL16V8[8].zeroIndex());
 Y(Pin_I10, "I10", GAL16V8[10].zeroIndex()); 
+#ifdef ALTPIN_NAMES
+Y(Pin_CLK, "CLK", GAL16V8[0].zeroIndex());
 Y(Pin_OE, "OE", GAL16V8[10].zeroIndex());
+#endif
 
 Y(Pin_IO8, "IO8", GAL16V8[11].zeroIndex());
 Y(Pin_IO7, "IO7", GAL16V8[12].zeroIndex());
@@ -963,9 +943,12 @@ Y(Pin_IO2, "IO2", GAL16V8[17].zeroIndex());
 Y(Pin_IO1, "IO1", GAL16V8[18].zeroIndex());
 Z(binaryConvertWord, "binary convert", "0b", 2);
 Z(fallback, "fallback numeric conversion (no prefix)", "", 0);
-Y(hasSDCardWord, "sd?", sdEnabled);
-//X(extractBitWord, "extract", extractBit);
 #ifdef INCLUDE_ARITHMETIC_OPERATIONS
+X(dot, ".", popAndPrintStackTop);
+Y(hasSDCardWord, "sd?", sdEnabled);
+X(clearStackWord, "clear", [](const String&) { clearStack(); return true; });
+//X(extractBitWord, "extract", extractBit);
+X(depthWord, "depth", depth);
 X(addTwo, "+", addTwoNumbers);
 X(subTwo, "-", subtractTwoNumbers);
 X(mulTwo, "*", multiplyTwoNumbers);
@@ -987,16 +970,27 @@ X(lessThanEqualTwo, ">=", topLessThanOrEqualLower);
 #undef X
 const PureWord* lookupTable[] = { 
     &words,
-    &dot,
+#ifdef TREAT_AS_FORTH_INTERPRETER
     &dotStack, 
     &ioPinMode,
+    &inputWord,
+    &outputWord,
     &setInput,
+    &lowWord,
+    &highWord,
+#else
+    &inputPin,
+    &outputPin,
+    &inputLow,
+    &inputHigh,
+#endif
     &pinsOp,
     &statusOp,
     &doPermutationsOp,
+#ifdef INCLUDE_ARITHMETIC_OPERATIONS
+    &dot,
     &clearStackWord,
     &depthWord,
-#ifdef INCLUDE_ARITHMETIC_OPERATIONS
     // arithmetic operators
     &addTwo,
     &subTwo,
@@ -1015,13 +1009,11 @@ const PureWord* lookupTable[] = {
     &lessThanTwo,
     &greaterThanEqualTwo,
     &lessThanEqualTwo,
+    &hasSDCardWord,
+    //&extractBitWord,
 #endif
     // constants
-    &inputWord,
-    &outputWord,
-    &lowWord,
-    &highWord,
-    &Pin_I1, &Pin_CLK,
+    &Pin_I1, 
     &Pin_I2,
     &Pin_I3,
     &Pin_I4,
@@ -1030,7 +1022,7 @@ const PureWord* lookupTable[] = {
     &Pin_I7,
     &Pin_I8,
     &Pin_I9,
-    &Pin_I10, &Pin_OE,
+    &Pin_I10, 
     &Pin_IO8,
     &Pin_IO7,
     &Pin_IO6,
@@ -1039,8 +1031,10 @@ const PureWord* lookupTable[] = {
     &Pin_IO3,
     &Pin_IO2,
     &Pin_IO1,
-    &hasSDCardWord,
-    //&extractBitWord,
+#ifdef ALTPIN_NAMES
+    &Pin_CLK,
+    &Pin_OE,
+#endif
     &binaryConvertWord,
     // must come last
     &fallback,
@@ -1347,27 +1341,4 @@ bool invertBits(const String&) noexcept {
         return true;
     }
     return false;
-}
-
-bool
-saveRTCValueToDisk(const String&) noexcept {
-    bool successfulFileOpening = false;
-    if (sdEnabled && rtcEnabled) {
-        DynamicJsonDocument doc(1024);
-        doc["timestamp"] = rtc.now().timestamp();
-        if (File theFile = SD.open(cfgPath, FILE_WRITE); theFile) {
-            successfulFileOpening = true;
-            serializeJson(doc, theFile);
-            theFile.close();
-        } else {
-            errorMessage = ErrorCodes::CantOpenFile;
-        }
-    } else if (!sdEnabled) {
-        errorMessage = ErrorCodes::NoSDCard;
-    } else if (!rtcEnabled) {
-        errorMessage = ErrorCodes::NoRTC;
-    } else {
-        errorMessage = ErrorCodes::GeneralFailure;
-    }
-    return sdEnabled && rtcEnabled && successfulFileOpening;
 }
