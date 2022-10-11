@@ -74,7 +74,7 @@ class GALPinDescription {
         constexpr auto outputEnablePin() const noexcept { return (states_ & ValidStates::OutputEnable) != 0; }
         constexpr auto inputPin() const noexcept { return (states_ & ValidStates::Input) != 0; }
         constexpr auto outputPin() const noexcept { return (states_ & ValidStates::Output) != 0; }
-        constexpr auto inputOnlyPin() const noexcept { return inputPin() && !outputPin(); }
+        constexpr auto inputOnlyPin() const noexcept { return inputPin() && !outputPin() && !outputEnablePin(); }
         constexpr auto ioPin() const noexcept { return inputPin() && outputPin(); }
         constexpr operator bool() const noexcept { return valid(); }
     private:
@@ -872,7 +872,8 @@ Y(Pin_I6,  "I6",  GAL16V8[5].zeroIndex());
 Y(Pin_I7,  "I7",  GAL16V8[6].zeroIndex());
 Y(Pin_I8,  "I8",  GAL16V8[7].zeroIndex());
 Y(Pin_I9,  "I9",  GAL16V8[8].zeroIndex());
-Y(Pin_I10, "I10", GAL16V8[10].zeroIndex()); Y(Pin_OE, "OE", GAL16V8[10].zeroIndex());
+Y(Pin_I10, "I10", GAL16V8[10].zeroIndex()); 
+Y(Pin_OE, "OE", GAL16V8[10].zeroIndex());
 
 Y(Pin_IO8, "IO8", GAL16V8[11].zeroIndex());
 Y(Pin_IO7, "IO7", GAL16V8[12].zeroIndex());
