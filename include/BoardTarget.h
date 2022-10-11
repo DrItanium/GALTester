@@ -32,7 +32,7 @@ constexpr auto getSDCardPin() noexcept {
 #elif defined(ARDUINO_GRAND_CENTRAL_M4)
     return SDCARD_SS_PIN;
 #else
-    return 4;
+    return 10;
 #endif
 }
 

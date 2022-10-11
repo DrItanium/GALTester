@@ -222,8 +222,6 @@ class GALInterface {
         uint8_t sampleOutputs() noexcept {
             return read8<IOExpanderAddress::GAL_16V8_Element, MCP23x17Registers::GPIOA>(CS);
         }
-
-
         void setAllPinsDirections(uint16_t value) noexcept {
             writeDirection<IOExpanderAddress::GAL_16V8_Element>(CS, value);
         }
@@ -381,14 +379,14 @@ GALInterface::isInputPin(const GALPinDescription& pin) const noexcept {
 
 uint8_t
 GALInterface::readOutputs() const noexcept {
-    return read8(MCP23x17Registers::GPIOB);
+    return read8(MCP23x17Registers::GPIOA);
 }
 void
 GALInterface::configureIOPins(uint8_t pattern) noexcept {
     ioPinConfiguration_ = pattern;
     // invert the bits since we want inputs _TO_ the GAL being an output and 
     // outputs _FROM_ the gal being inputs to the chip
-    write8(MCP23x17Registers::IODIRB, static_cast<uint8_t>(~ioPinConfiguration_));
+    write8(MCP23x17Registers::IODIRA, static_cast<uint8_t>(~ioPinConfiguration_));
 }
 void
 GALInterface::setClockFrequency(int freq) noexcept {
@@ -426,8 +424,8 @@ GALInterface::updateInputs() noexcept {
         digitalWrite(clk_, inputPinState_.bits.clkState);
     }
     digitalWrite(oe_, inputPinState_.bits.oeState);
-    write8(MCP23x17Registers::OLATA, inputPinState_.bits.inputs);
-    write8(MCP23x17Registers::OLATB, inputPinState_.bits.ioPins);
+    write8(MCP23x17Registers::OLATB, inputPinState_.bits.inputs);
+    write8(MCP23x17Registers::OLATA, inputPinState_.bits.ioPins);
 }
 
 void
@@ -531,6 +529,8 @@ GALInterface::displayRegisters() const noexcept {
     Serial.println(static_cast<byte>(~ioPinConfiguration_), BIN);
     Serial.print(F("Input values: 0b"));
     Serial.println(inputPinState_.getMaskedState(), BIN);
+    Serial.print(F("Outputs: 0x"));
+    Serial.println(readOutputs(), HEX);
 }
 enum class ErrorCodes {
     None,
@@ -1208,15 +1208,17 @@ runThroughAllPermutations(const String&) noexcept {
         // okay so we assume that at this point, we have already defined the
         // apropriate pinout
         File file = SD.open("output.txt", FILE_WRITE);
-        // the simplest thing to do now would be to just run through all
-        // 18-bit permutations and capture the result
-        for (int32_t pattern = 0; pattern < 0b11'1111'1111'1111'1111; ++pattern) {
-            iface.setInputs(pattern);
-            auto result = iface.readOutputs();
-            file.print(F("0b"));
-            file.print(pattern, BIN);
-            file.print(F(" => 0b"));
-            file.println(static_cast<uint16_t>(result), BIN);
+        if (file) {
+            // the simplest thing to do now would be to just run through all
+            // 18-bit permutations and capture the result
+            for (int32_t pattern = 0; pattern < 0b11'1111'1111'1111'1111; ++pattern) {
+                iface.setInputs(pattern);
+                auto result = iface.readOutputs();
+                file.print(F("0b"));
+                file.print(pattern, BIN);
+                file.print(F(" => 0b"));
+                file.println(static_cast<uint16_t>(result), BIN);
+            }
         }
         file.close();
     } else {
