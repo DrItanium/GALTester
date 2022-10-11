@@ -543,6 +543,7 @@ enum class ErrorCodes {
     NotEnoughStackElements,
     DivideByZero,
     NoSDCard,
+    CantOpenFile,
 };
 extern String inputString;
 extern bool stringComplete;
@@ -634,6 +635,9 @@ handleError(bool state, bool stillEvaluating) noexcept {
             break;
         case ErrorCodes::NoSDCard:
             Serial.println(F("no sd card inserted"));
+            break;
+        case ErrorCodes::CantOpenFile:
+            Serial.println(F("Cannot open file for writing!"));
             break;
         default: 
             Serial.println(F("some error happened")); 
@@ -1219,6 +1223,8 @@ runThroughAllPermutations(const String&) noexcept {
                 file.print(F(" => 0b"));
                 file.println(static_cast<uint16_t>(result), BIN);
             }
+        } else {
+            errorMessage = ErrorCodes::CantOpenFile;
         }
         file.close();
     } else {
