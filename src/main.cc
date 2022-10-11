@@ -864,7 +864,6 @@ bool setIOPinMode(const String&) noexcept;
 bool setInputPinValue(const String&) noexcept;
 bool swapStackElements(const String&) noexcept;
 bool runThroughAllPermutations(const String&) noexcept;
-bool invertBits(const String&) noexcept;
 bool twoNumbersEqual(const String&) noexcept;
 bool twoNumbersNotEqual(const String&) noexcept;
 bool topGreaterThanLower(const String&) noexcept;
@@ -904,20 +903,10 @@ X(words, "words", listWords);
 X(pinsOp, "pins", displayPinout);
 X(statusOp, "status", displayRegisters);
 X(doPermutationsOp, "do-permutations", runThroughAllPermutations);
-#ifdef TREAT_AS_FORTH_INTERPRETER
-X(dotStack, ".s", printStackContents);
-X(ioPinMode, "io-pin-mode", setIOPinMode);
-Y(inputWord, "input", INPUT);
-Y(outputWord, "output", OUTPUT);
-Y(lowWord, "low", LOW);
-Y(highWord, "high", HIGH);
-X(setInput, "set-input", setInputPinValue);
-#else
 X(inputPin, "input-pin", [](const String& theStr) { return pushItemOntoStack(INPUT, TreatAs<decltype(INPUT)>{}) && setIOPinMode(theStr); });
 X(outputPin, "output-pin", [](const String& theStr) { return pushItemOntoStack(OUTPUT, TreatAs<decltype(OUTPUT)> {}) && setIOPinMode(theStr); });
 X(inputLow, "set-low", [](const String& theStr) { return pushItemOntoStack(LOW, TreatAs<decltype(LOW)>{}) && setInputPinValue(theStr); });
 X(inputHigh, "set-high", [](const String& theStr) { return pushItemOntoStack(HIGH, TreatAs<decltype(HIGH)> { }) && setInputPinValue(theStr); });
-#endif
 Y(Pin_I1,  "I1",  GAL16V8[0].zeroIndex()); 
 Y(Pin_I2,  "I2",  GAL16V8[1].zeroIndex());
 Y(Pin_I3,  "I3",  GAL16V8[2].zeroIndex());
@@ -928,10 +917,6 @@ Y(Pin_I7,  "I7",  GAL16V8[6].zeroIndex());
 Y(Pin_I8,  "I8",  GAL16V8[7].zeroIndex());
 Y(Pin_I9,  "I9",  GAL16V8[8].zeroIndex());
 Y(Pin_I10, "I10", GAL16V8[10].zeroIndex()); 
-#ifdef ALTPIN_NAMES
-Y(Pin_CLK, "CLK", GAL16V8[0].zeroIndex());
-Y(Pin_OE, "OE", GAL16V8[10].zeroIndex());
-#endif
 
 Y(Pin_IO8, "IO8", GAL16V8[11].zeroIndex());
 Y(Pin_IO7, "IO7", GAL16V8[12].zeroIndex());
@@ -941,77 +926,19 @@ Y(Pin_IO4, "IO4", GAL16V8[15].zeroIndex());
 Y(Pin_IO3, "IO3", GAL16V8[16].zeroIndex());
 Y(Pin_IO2, "IO2", GAL16V8[17].zeroIndex());
 Y(Pin_IO1, "IO1", GAL16V8[18].zeroIndex());
-Z(binaryConvertWord, "binary convert", "0b", 2);
 Z(fallback, "fallback numeric conversion (no prefix)", "", 0);
-#ifdef INCLUDE_ARITHMETIC_OPERATIONS
-X(dot, ".", popAndPrintStackTop);
-Y(hasSDCardWord, "sd?", sdEnabled);
-X(clearStackWord, "clear", [](const String&) { clearStack(); return true; });
-//X(extractBitWord, "extract", extractBit);
-X(depthWord, "depth", depth);
-X(addTwo, "+", addTwoNumbers);
-X(subTwo, "-", subtractTwoNumbers);
-X(mulTwo, "*", multiplyTwoNumbers);
-X(divTwo, "div", divideTwoNumbers);
-X(modTwo, "mod", moduloTwoNumbers);
-X(orTwo, "or", orTwoNumbers);
-X(andTwo, "and", andTwoNumbers);
-X(xorTwo, "xor", xorTwoNumbers);
-X(invert, "not", invertBits);
-X(equalTwo, "=", twoNumbersEqual);
-X(notEqualTwo, "<>", twoNumbersNotEqual);
-X(greaterThanTwo, "<", topGreaterThanLower);
-X(lessThanTwo, ">", topLessThanLower);
-X(greaterThanEqualTwo, "<=", topGreaterThanOrEqualLower);
-X(lessThanEqualTwo, ">=", topLessThanOrEqualLower);
-#endif
 #undef Z
 #undef Y
 #undef X
 const PureWord* lookupTable[] = { 
     &words,
-#ifdef TREAT_AS_FORTH_INTERPRETER
-    &dotStack, 
-    &ioPinMode,
-    &inputWord,
-    &outputWord,
-    &setInput,
-    &lowWord,
-    &highWord,
-#else
     &inputPin,
     &outputPin,
     &inputLow,
     &inputHigh,
-#endif
     &pinsOp,
     &statusOp,
     &doPermutationsOp,
-#ifdef INCLUDE_ARITHMETIC_OPERATIONS
-    &dot,
-    &clearStackWord,
-    &depthWord,
-    // arithmetic operators
-    &addTwo,
-    &subTwo,
-    &mulTwo,
-    &divTwo,
-    &modTwo,
-    // logical operators
-    &orTwo,
-    &andTwo,
-    &xorTwo,
-    &invert,
-    // comparison operators
-    &equalTwo,
-    &notEqualTwo,
-    &greaterThanTwo,
-    &lessThanTwo,
-    &greaterThanEqualTwo,
-    &lessThanEqualTwo,
-    &hasSDCardWord,
-    //&extractBitWord,
-#endif
     // constants
     &Pin_I1, 
     &Pin_I2,
@@ -1031,11 +958,6 @@ const PureWord* lookupTable[] = {
     &Pin_IO3,
     &Pin_IO2,
     &Pin_IO1,
-#ifdef ALTPIN_NAMES
-    &Pin_CLK,
-    &Pin_OE,
-#endif
-    &binaryConvertWord,
     // must come last
     &fallback,
 };
@@ -1124,101 +1046,6 @@ printStackContents(const String&) noexcept {
     Serial.println();
     return true;
 }
-template<typename T>
-bool
-performBinaryOperation(T function, bool topMustNotBeZero = false) noexcept {
-    if (expectedNumberOfItemsOnStack(2)) {
-        int32_t top, lower;
-        popItemOffStack(top);
-        popItemOffStack(lower);
-        if (topMustNotBeZero) {
-            if (top == 0) {
-                errorMessage = ErrorCodes::DivideByZero;
-                return false;
-            }
-        }
-        return pushItemOntoStack(function(lower, top));
-    }
-    return false;
-}
-bool 
-addTwoNumbers(const String&) noexcept {
-    return performBinaryOperation([](int32_t a, int32_t b) { return a + b; });
-}
-bool 
-subtractTwoNumbers(const String&) noexcept {
-    return performBinaryOperation([](int32_t a, int32_t b) { return a - b; });
-}
-bool 
-multiplyTwoNumbers(const String&) noexcept {
-    return performBinaryOperation([](int32_t a, int32_t b) { return a * b; });
-}
-
-bool
-orTwoNumbers(const String&) noexcept {
-    return performBinaryOperation([](int32_t a, int32_t b) { return a | b; });
-}
-bool
-andTwoNumbers(const String&) noexcept {
-    return performBinaryOperation([](int32_t a, int32_t b) { return a & b; });
-}
-bool
-xorTwoNumbers(const String&) noexcept {
-    return performBinaryOperation([](int32_t a, int32_t b) { return a ^ b; });
-}
-
-bool 
-divideTwoNumbers(const String&) noexcept {
-    return performBinaryOperation([](int32_t a, int32_t b) { return a / b; }, true);
-}
-
-bool 
-moduloTwoNumbers(const String&) noexcept {
-    return performBinaryOperation([](int32_t a, int32_t b) { return a % b; }, true);
-}
-template<typename T>
-bool
-binaryBooleanOperation(T fn) noexcept {
-    if (expectedNumberOfItemsOnStack(2)) {
-        int32_t top, lower;
-        popItemOffStack(top);
-        popItemOffStack(lower);
-        return pushItemOntoStack(fn(lower, top), TreatAsBoolean{});
-    }
-    return false;
-}
-bool 
-twoNumbersEqual(const String&) noexcept {
-    return binaryBooleanOperation([](int32_t a, int32_t b) { return a == b; });
-}
-bool 
-twoNumbersNotEqual(const String&) noexcept {
-    return binaryBooleanOperation([](int32_t a, int32_t b) { return a != b; });
-}
-
-bool 
-topGreaterThanLower(const String&) noexcept {
-    return binaryBooleanOperation([](int32_t a, int32_t b) { return a < b; });
-}
-
-bool 
-topGreaterThanOrEqualLower(const String&) noexcept {
-    return binaryBooleanOperation([](int32_t a, int32_t b) { return a <= b; });
-}
-
-bool 
-topLessThanLower(const String&) noexcept {
-    return binaryBooleanOperation([](int32_t a, int32_t b) { return a > b; });
-}
-bool 
-topLessThanOrEqualLower(const String&) noexcept {
-    return binaryBooleanOperation([](int32_t a, int32_t b) { return a >= b; });
-}
-bool 
-duplicateTop(const String&) noexcept {
-    return duplicateTopOfStack();
-}
-
 bool
 setIOPinMode(const String&) noexcept {
     if (numberOfItemsOnStack() < 2) {
@@ -1333,12 +1160,4 @@ const PureWord* findWord(const String& word) noexcept {
         }
     }
     return nullptr;
-}
-bool invertBits(const String&) noexcept {
-    if (expectedNumberOfItemsOnStack(1)) {
-        auto top = theStack[stackPosition];
-        theStack[stackPosition] = ~top;
-        return true;
-    }
-    return false;
 }
