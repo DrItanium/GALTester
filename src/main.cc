@@ -26,10 +26,15 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <SD.h>
+#include <RTClib.h>
 #ifdef __AVR__
 #include <avr/pgmspace.h>
 #endif
 #include <Wire.h>
+#include <ArduinoJson.h>
+RTC_PCF8523 rtc;
+
+const char *cfgPath = "/config.txt";  // <- SD library uses 8.3 filenames
 constexpr auto CS = getCSPin();
 constexpr auto RESET_IOEXP = getIOEXPResetPin();
 constexpr auto I9 = getI9Pin();
@@ -38,6 +43,7 @@ constexpr auto I1_CLK = getI1CLKPin();
 constexpr auto SDSelect = getSDCardPin();
 
 
+const char daysOfTheWeek[7][12] PROGMEM = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
 enum class IOExpanderAddress : byte {
     GAL_16V8_Element = 0b0000,
@@ -473,8 +479,22 @@ GALInterface iface(CS,
         IOEXP_INT, 
         IOExpanderAddress::GAL_16V8_Element);
 volatile bool sdEnabled = false;
+volatile bool rtcEnabled = false;
 void read() noexcept;
 void eval() noexcept;
+void initRTCDateTime() noexcept {
+    // When time needs to be set on a new device, or after a power loss, the
+    // following line sets the RTC to the date & time this sketch was compiled
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    // This line sets the RTC with an explicit date & time, for example to set
+    // January 21, 2014 at 3am you would call:
+    // rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
+    //
+    // Note: allow 2 seconds after inserting battery or applying external power
+    // without battery before calling adjust(). This gives the PCF8523's
+    // crystal oscillator time to stabilize. If you call adjust() very quickly
+    // after the RTC is powered, lostPower() may still return true.
+}
 void 
 setup() {
     Serial.begin(115200);
@@ -498,7 +518,55 @@ setup() {
         Serial.println(F("SD CARD AVAILABLE!"));
         // load the configuration from the SDCard to set everything up?
     }
+
+    Serial.println(F("Checking for RTC..."));
+    if (! rtc.begin()) {
+        Serial.println(F("NO RTC FOUND!"));
+    } else {
+        rtcEnabled = true;
+        Serial.println(F("RTC FOUND!"));
+        if (! rtc.initialized() || rtc.lostPower()) {
+            Serial.println(F("RTC not initialized, fixing..."));
+            if (sdEnabled && SD.exists(cfgPath)) {
+                Serial.println(F("Restoring date and time from file on SDCard"));
+                if (File oldFile = SD.open(cfgPath, FILE_READ); oldFile) {
+                    StaticJsonDocument<512> doc;
+                    if (auto error = deserializeJson(doc, oldFile); error) {
+                        Serial.println(F("Failed to read file, using default configuration"));
+                        initRTCDateTime();
+                    } else {
+                        const char* stamp = doc["timestamp"];
+                        rtc.adjust(DateTime{stamp});
+                    }
+                    oldFile.close();
+                } else {
+                    initRTCDateTime();
+                }
+            } else {
+                initRTCDateTime();
+            }
+            Serial.println(F("Done setting up!"));
+        } 
+        rtc.start();
+        // printout current date and time
+        DateTime now = rtc.now();
+        Serial.print(now.year(), DEC);
+        Serial.print('/');
+        Serial.print(now.month(), DEC);
+        Serial.print('/');
+        Serial.print(now.day(), DEC);
+        Serial.print(F(" ("));
+        Serial.print(daysOfTheWeek[now.dayOfTheWeek()]);
+        Serial.print(F(") "));
+        Serial.print(now.hour(), DEC);
+        Serial.print(':');
+        Serial.print(now.minute(), DEC);
+        Serial.print(':');
+        Serial.print(now.second(), DEC);
+        Serial.println();
+    }
     Serial.println();
+
 }
 
 void loop() {
@@ -544,6 +612,7 @@ enum class ErrorCodes {
     DivideByZero,
     NoSDCard,
     CantOpenFile,
+    NoRTC,
 };
 extern String inputString;
 extern bool stringComplete;
@@ -638,6 +707,9 @@ handleError(bool state, bool stillEvaluating) noexcept {
             break;
         case ErrorCodes::CantOpenFile:
             Serial.println(F("Cannot open file for writing!"));
+            break;
+        case ErrorCodes::NoRTC:
+            Serial.println(F("no rtc active!"));
             break;
         default: 
             Serial.println(F("some error happened")); 
@@ -825,6 +897,7 @@ bool topLessThanLower(const String&) noexcept;
 bool topGreaterThanOrEqualLower(const String&) noexcept;
 bool topLessThanOrEqualLower(const String&) noexcept;
 //bool extractBit(const String&) noexcept;
+bool saveRTCValueToDisk(const String&) noexcept;
 class PureLambdaWord : public PureWord {
     public:
         using FunctionBody = bool(*)(const String&);
@@ -861,6 +934,7 @@ X(setInput, "set-input", setInputPinValue);
 X(pinsOp, "pins", displayPinout);
 X(statusOp, "status", displayRegisters);
 X(doPermutationsOp, "do-permutations", runThroughAllPermutations);
+X(updateRTCConfig, "save-rtc", saveRTCValueToDisk);
 X(clearStackWord, "clear", [](const String&) { clearStack(); return true; });
 X(depthWord, "depth", depth);
 Y(inputWord, "input", INPUT);
@@ -1273,4 +1347,27 @@ bool invertBits(const String&) noexcept {
         return true;
     }
     return false;
+}
+
+bool
+saveRTCValueToDisk(const String&) noexcept {
+    bool successfulFileOpening = false;
+    if (sdEnabled && rtcEnabled) {
+        DynamicJsonDocument doc(1024);
+        doc["timestamp"] = rtc.now().timestamp();
+        if (File theFile = SD.open(cfgPath, FILE_WRITE); theFile) {
+            successfulFileOpening = true;
+            serializeJson(doc, theFile);
+            theFile.close();
+        } else {
+            errorMessage = ErrorCodes::CantOpenFile;
+        }
+    } else if (!sdEnabled) {
+        errorMessage = ErrorCodes::NoSDCard;
+    } else if (!rtcEnabled) {
+        errorMessage = ErrorCodes::NoRTC;
+    } else {
+        errorMessage = ErrorCodes::GeneralFailure;
+    }
+    return sdEnabled && rtcEnabled && successfulFileOpening;
 }
