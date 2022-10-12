@@ -40,7 +40,7 @@ constexpr auto getI1CLKPin() noexcept {
 #ifdef ARDUINO_METRO_ESP32S2
     return 10;
 #else
-    return 4;
+    return 5;
 #endif
 }
 constexpr auto getIOEXPIntPin() noexcept {
