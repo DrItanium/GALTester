@@ -491,6 +491,22 @@ void initRTCDateTime() noexcept {
     // crystal oscillator time to stabilize. If you call adjust() very quickly
     // after the RTC is powered, lostPower() may still return true.
 }
+void
+printRTCDateTime() noexcept {
+        auto now = rtc.now();
+        Serial.print(now.year(), DEC);
+        Serial.print('/');
+        Serial.print(now.month(), DEC);
+        Serial.print('/');
+        Serial.print(now.day(), DEC);
+        Serial.print(' ');
+        Serial.print(now.hour(), DEC);
+        Serial.print(':');
+        Serial.print(now.minute(), DEC);
+        Serial.print(':');
+        Serial.print(now.second(), DEC);
+        Serial.println();
+}
 void 
 setup() {
     Serial.begin(115200);
@@ -526,19 +542,7 @@ setup() {
             initRTCDateTime();
         }
         rtc.start();
-        auto now = rtc.now();
-        Serial.print(now.year(), DEC);
-        Serial.print('/');
-        Serial.print(now.month(), DEC);
-        Serial.print('/');
-        Serial.print(now.day(), DEC);
-        Serial.print(' ');
-        Serial.print(now.hour(), DEC);
-        Serial.print(':');
-        Serial.print(now.minute(), DEC);
-        Serial.print(':');
-        Serial.print(now.second(), DEC);
-        Serial.println();
+        printRTCDateTime();
     }
     Serial.println();
 
@@ -903,29 +907,29 @@ X(words, "words", listWords);
 X(pinsOp, "pins", displayPinout);
 X(statusOp, "status", displayRegisters);
 X(doPermutationsOp, "do-permutations", runThroughAllPermutations);
-X(inputPin, "input-pin", [](const String& theStr) { return pushItemOntoStack(INPUT, TreatAs<decltype(INPUT)>{}) && setIOPinMode(theStr); });
-X(outputPin, "output-pin", [](const String& theStr) { return pushItemOntoStack(OUTPUT, TreatAs<decltype(OUTPUT)> {}) && setIOPinMode(theStr); });
-X(inputLow, "set-low", [](const String& theStr) { return pushItemOntoStack(LOW, TreatAs<decltype(LOW)>{}) && setInputPinValue(theStr); });
-X(inputHigh, "set-high", [](const String& theStr) { return pushItemOntoStack(HIGH, TreatAs<decltype(HIGH)> { }) && setInputPinValue(theStr); });
-Y(Pin_I1,  "I1",  GAL16V8[0].zeroIndex()); 
-Y(Pin_I2,  "I2",  GAL16V8[1].zeroIndex());
-Y(Pin_I3,  "I3",  GAL16V8[2].zeroIndex());
-Y(Pin_I4,  "I4",  GAL16V8[3].zeroIndex());
-Y(Pin_I5,  "I5",  GAL16V8[4].zeroIndex());
-Y(Pin_I6,  "I6",  GAL16V8[5].zeroIndex());
-Y(Pin_I7,  "I7",  GAL16V8[6].zeroIndex());
-Y(Pin_I8,  "I8",  GAL16V8[7].zeroIndex());
-Y(Pin_I9,  "I9",  GAL16V8[8].zeroIndex());
-Y(Pin_I10, "I10", GAL16V8[10].zeroIndex()); 
-
-Y(Pin_IO8, "IO8", GAL16V8[11].zeroIndex());
-Y(Pin_IO7, "IO7", GAL16V8[12].zeroIndex());
-Y(Pin_IO6, "IO6", GAL16V8[13].zeroIndex());
-Y(Pin_IO5, "IO5", GAL16V8[14].zeroIndex());
-Y(Pin_IO4, "IO4", GAL16V8[15].zeroIndex());
-Y(Pin_IO3, "IO3", GAL16V8[16].zeroIndex());
-Y(Pin_IO2, "IO2", GAL16V8[17].zeroIndex());
-Y(Pin_IO1, "IO1", GAL16V8[18].zeroIndex());
+X(inputPin, "input-pin", [](const String& theStr) noexcept { return pushItemOntoStack(INPUT, TreatAs<decltype(INPUT)>{}) && setIOPinMode(theStr); });
+X(outputPin, "output-pin", [](const String& theStr) noexcept { return pushItemOntoStack(OUTPUT, TreatAs<decltype(OUTPUT)> {}) && setIOPinMode(theStr); });
+X(inputLow, "set-low", [](const String& theStr) noexcept { return pushItemOntoStack(LOW, TreatAs<decltype(LOW)>{}) && setInputPinValue(theStr); });
+X(inputHigh, "set-high", [](const String& theStr) noexcept { return pushItemOntoStack(HIGH, TreatAs<decltype(HIGH)> { }) && setInputPinValue(theStr); });
+X(dateTimeNow, "now", [](const String&) noexcept { printRTCDateTime(); return true; });
+Y(Pin_I1,  "P1",  GAL16V8[0].zeroIndex()); 
+Y(Pin_I2,  "P2",  GAL16V8[1].zeroIndex());
+Y(Pin_I3,  "P3",  GAL16V8[2].zeroIndex());
+Y(Pin_I4,  "P4",  GAL16V8[3].zeroIndex());
+Y(Pin_I5,  "P5",  GAL16V8[4].zeroIndex());
+Y(Pin_I6,  "P6",  GAL16V8[5].zeroIndex());
+Y(Pin_I7,  "P7",  GAL16V8[6].zeroIndex());
+Y(Pin_I8,  "P8",  GAL16V8[7].zeroIndex());
+Y(Pin_I9,  "P9",  GAL16V8[8].zeroIndex());
+Y(Pin_I10, "P11", GAL16V8[10].zeroIndex()); 
+Y(Pin_IO8, "P12", GAL16V8[11].zeroIndex());
+Y(Pin_IO7, "P13", GAL16V8[12].zeroIndex());
+Y(Pin_IO6, "P14", GAL16V8[13].zeroIndex());
+Y(Pin_IO5, "P15", GAL16V8[14].zeroIndex());
+Y(Pin_IO4, "P16", GAL16V8[15].zeroIndex());
+Y(Pin_IO3, "P17", GAL16V8[16].zeroIndex());
+Y(Pin_IO2, "P18", GAL16V8[17].zeroIndex());
+Y(Pin_IO1, "P19", GAL16V8[18].zeroIndex());
 Z(fallback, "fallback numeric conversion (no prefix)", "", 0);
 #undef Z
 #undef Y
@@ -939,6 +943,7 @@ const PureWord* lookupTable[] = {
     &pinsOp,
     &statusOp,
     &doPermutationsOp,
+    &dateTimeNow,
     // constants
     &Pin_I1, 
     &Pin_I2,
