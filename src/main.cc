@@ -1152,9 +1152,10 @@ displayPinout(const String&) noexcept {
     return true;
 }
 bool
-displayRegisters(const String&) noexcept {
+displayRegisters(const String& theString) noexcept {
     iface.displayRegisters();
-    return true;
+    Serial.println(F("STACK CONTENTS: "));
+    return printStackContents(theString);
 }
 
 
