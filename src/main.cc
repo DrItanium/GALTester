@@ -894,6 +894,8 @@ Y(Pin_IO4, "P16", GAL16V8[15].zeroIndex());
 Y(Pin_IO3, "P17", GAL16V8[16].zeroIndex());
 Y(Pin_IO2, "P18", GAL16V8[17].zeroIndex());
 Y(Pin_IO1, "P19", GAL16V8[18].zeroIndex());
+Z(hexParse, "hex number parse", "0x", 16);
+Z(binaryParse, "binary number parse", "0b", 2);
 Z(fallback, "fallback numeric conversion (no prefix)", "", 0);
 #undef Z
 #undef Y
@@ -927,6 +929,7 @@ const PureWord* lookupTable[] = {
     &Pin_IO3,
     &Pin_IO2,
     &Pin_IO1,
+    &binaryParse,
     // must come last
     &fallback,
 };
