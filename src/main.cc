@@ -86,14 +86,14 @@ class GALPinDescription {
 };
 static constexpr GALPinDescription GAL16V8[20] {
     GALPinDescription { 1, _BV(0), GALPinDescription::ValidStates::Clock_Input },
-    GALPinDescription { 2, _BV(7), GALPinDescription::ValidStates::Input },
-    GALPinDescription { 3, _BV(6), GALPinDescription::ValidStates::Input },
-    GALPinDescription { 4, _BV(5), GALPinDescription::ValidStates::Input },
-    GALPinDescription { 5, _BV(4), GALPinDescription::ValidStates::Input },
-    GALPinDescription { 6, _BV(3), GALPinDescription::ValidStates::Input },
-    GALPinDescription { 7, _BV(2), GALPinDescription::ValidStates::Input },
-    GALPinDescription { 8, _BV(1), GALPinDescription::ValidStates::Input },
-    GALPinDescription { 9, _BV(0), GALPinDescription::ValidStates::Input },
+    GALPinDescription { 2, _BV(0), GALPinDescription::ValidStates::Input },
+    GALPinDescription { 3, _BV(1), GALPinDescription::ValidStates::Input },
+    GALPinDescription { 4, _BV(2), GALPinDescription::ValidStates::Input },
+    GALPinDescription { 5, _BV(3), GALPinDescription::ValidStates::Input },
+    GALPinDescription { 6, _BV(4), GALPinDescription::ValidStates::Input },
+    GALPinDescription { 7, _BV(5), GALPinDescription::ValidStates::Input },
+    GALPinDescription { 8, _BV(6), GALPinDescription::ValidStates::Input },
+    GALPinDescription { 9, _BV(7), GALPinDescription::ValidStates::Input },
     GALPinDescription { 10 }, // GND
     GALPinDescription { 11, _BV(0), GALPinDescription::ValidStates::OutputEnable_Input },
 
@@ -220,17 +220,6 @@ class GALInterface {
             digitalWrite(cs_, HIGH);
             SPI.endTransaction();
         }
-#if 0
-        uint8_t sampleOutputs() noexcept {
-            return read8<IOExpanderAddress::GAL_16V8_Element, MCP23x17Registers::GPIOA>(CS);
-        }
-        void setAllPinsDirections(uint16_t value) noexcept {
-            writeDirection<IOExpanderAddress::GAL_16V8_Element>(CS, value);
-        }
-        void setIOPinsDirection(uint8_t value) noexcept {
-            setAllPinsDirections(0xFF00 | static_cast<uint16_t>(value)); 
-        }
-#endif
         union InputState {
             uint32_t full;
             struct {
@@ -356,7 +345,7 @@ GALInterface::configureIOPin(const GALPinDescription& pin, int mode) noexcept {
 
 bool
 GALInterface::isInputPin(const GALPinDescription& pin) const noexcept {
-    return pin.valid() && (pin.inputOnlyPin() || ((static_cast<uint8_t>(~getIOPinConfiguration()) & static_cast<uint8_t>(pin.mask())) == 0));
+    return pin.valid() && (pin.inputOnlyPin() || ((static_cast<uint8_t>(getIOPinConfiguration()) & static_cast<uint8_t>(pin.mask())) == 0));
 }
 
 uint8_t
@@ -376,7 +365,7 @@ void
 GALInterface::configureIOPins(uint8_t pattern) noexcept {
     // invert the bits since we want inputs _TO_ the GAL being an output and 
     // outputs _FROM_ the gal being inputs to the chip
-    write8(MCP23x17Registers::IODIRA, static_cast<uint8_t>(~pattern));
+    write8(MCP23x17Registers::IODIRA, static_cast<uint8_t>(pattern));
 }
 void
 GALInterface::setInput(int k, bool state) noexcept {
@@ -439,10 +428,9 @@ GALInterface::begin() noexcept {
     digitalWrite(reset_, LOW);
     digitalWrite(reset_, HIGH);
     pinMode(IOEXP_INT, INPUT_PULLUP);
-    write16(MCP23x17Registers::IODIR, 0xFF00); // PORTB is set to inputs, PORTA are outputs
+    write16(MCP23x17Registers::IODIR, 0x00FF); // PORTB is set to inputs, PORTA are outputs
     write16(MCP23x17Registers::OLAT, 0xFFFF);
     setInputs(0); // set all inputs to low
-    configureIOPins(0); // all will be _outputs_
     // setup the MCP23S17 as needed
 }
 GALInterface iface(CS, 
@@ -496,7 +484,6 @@ setup() {
     Serial.println();
     SPI.begin();
     iface.begin();
-    iface.configureIOPins(0);
     pinMode(SDSelect, OUTPUT);
     digitalWrite(SDSelect, HIGH);
     Serial.println(F("Checking for an SD Card..."));
