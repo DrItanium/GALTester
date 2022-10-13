@@ -97,14 +97,14 @@ static constexpr GALPinDescription GAL16V8[20] {
     GALPinDescription { 10 }, // GND
     GALPinDescription { 11, _BV(0), GALPinDescription::ValidStates::OutputEnable_Input },
 
-    GALPinDescription { 12, _BV(7), GALPinDescription::ValidStates::Input_Output },
-    GALPinDescription { 13, _BV(6), GALPinDescription::ValidStates::Input_Output },
-    GALPinDescription { 14, _BV(5), GALPinDescription::ValidStates::Input_Output },
-    GALPinDescription { 15, _BV(4), GALPinDescription::ValidStates::Input_Output },
-    GALPinDescription { 16, _BV(3), GALPinDescription::ValidStates::Input_Output },
-    GALPinDescription { 17, _BV(2), GALPinDescription::ValidStates::Input_Output },
-    GALPinDescription { 18, _BV(1), GALPinDescription::ValidStates::Input_Output },
-    GALPinDescription { 19, _BV(0), GALPinDescription::ValidStates::Input_Output },
+    GALPinDescription { 12, _BV(0), GALPinDescription::ValidStates::Input_Output },
+    GALPinDescription { 13, _BV(1), GALPinDescription::ValidStates::Input_Output },
+    GALPinDescription { 14, _BV(2), GALPinDescription::ValidStates::Input_Output },
+    GALPinDescription { 15, _BV(3), GALPinDescription::ValidStates::Input_Output },
+    GALPinDescription { 16, _BV(4), GALPinDescription::ValidStates::Input_Output },
+    GALPinDescription { 17, _BV(5), GALPinDescription::ValidStates::Input_Output },
+    GALPinDescription { 18, _BV(6), GALPinDescription::ValidStates::Input_Output },
+    GALPinDescription { 19, _BV(7), GALPinDescription::ValidStates::Input_Output },
     GALPinDescription { 20 }, // VCC
 };
 static_assert(GAL16V8[10].outputEnablePin());
@@ -356,16 +356,19 @@ GALInterface::configureIOPin(const GALPinDescription& pin, int mode) noexcept {
         switch (auto temporary = ioPinConfiguration_; mode) {
             case INPUT:
                 /// @todo disable pullups
+                Serial.print(F("temporary: 0b"));
+                Serial.print(temporary, BIN);
+                Serial.print(F(" -> 0b"));
                 temporary |= pin.mask();
+                Serial.println(temporary, BIN);
                 configureIOPins(temporary);
                 break;
             case OUTPUT:
+                Serial.print(F("temporary: 0b"));
+                Serial.print(temporary, BIN);
+                Serial.print(F(" -> 0b"));
                 temporary &= ~(pin.mask());
-                configureIOPins(temporary);
-                break;
-            case INPUT_PULLUP:
-                /// @todo configure pullups
-                temporary |= (pin.mask());
+                Serial.println(temporary, BIN);
                 configureIOPins(temporary);
                 break;
             default:
