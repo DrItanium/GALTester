@@ -242,8 +242,6 @@ class GALInterface {
             uint32_t getMaskedState() const noexcept { return full & 0b11111111'1'11111111'1; }
         };
     private:
-        void updateInputs() noexcept;
-    private:
         /// @todo implement GAL22V10
     public:
         /**
@@ -253,13 +251,9 @@ class GALInterface {
          */
         void configureIOPins(uint8_t pattern) noexcept;
         void configureIOPin(const GALPinDescription& pin, int mode) noexcept;
-        uint8_t getIOPinConfiguration() const noexcept { return ioPinConfiguration_; }
+        uint8_t getIOPinConfiguration() const noexcept { return read8(MCP23x17Registers::IODIRA); }
         uint8_t readOutputs() const noexcept;
         void setInputs(uint32_t pattern) noexcept;
-        void setClockFrequency(int frequency) noexcept;
-        void treatClockPinAsDigitalInput() noexcept { setClockFrequency(0); }
-        bool clockPinIsDigitalInput() const noexcept { return clockFrequency_ == 0; }
-        constexpr auto getClockFrequency() const noexcept { return clockFrequency_; }
         void setInput(int pin, bool state) noexcept;
         bool getInputState(const GALPinDescription& desc) const noexcept;
     private:
@@ -294,13 +288,8 @@ class GALInterface {
                 if (pin) {
                     printPinId(thing, pin.index());
                     if (pin.clockPin()) {
-                        if (clockPinIsDigitalInput()) {
-                            thing.print(F("I ("));
-                            printSingleHighLowInput(thing, pin);
-                        } else {
-                            thing.print(F("CLK ("));
-                            thing.print(getClockFrequency());
-                        }
+                        thing.print(F("I ("));
+                        printSingleHighLowInput(thing, pin);
                     } else if (pin.outputEnablePin()) {
                         thing.print(F("I/~{OE} ("));
                         printSingleHighLowInput(thing, pin);
@@ -333,10 +322,6 @@ class GALInterface {
         IOExpanderAddress addr_;
         uint8_t readOpcode_;
         uint8_t writeOpcode_;
-        uint8_t ioPinConfiguration_ = 0; 
-        //uint8_t ioPinPullup_ = 0;
-        InputState inputPinState_;
-        int clockFrequency_ = 0; 
 };
 GALInterface::GALInterface(byte chipSelect, byte oe, byte clk, byte reset, byte intPin, IOExpanderAddress address) : 
     cs_(chipSelect), 
@@ -353,22 +338,13 @@ GALInterface::GALInterface(byte chipSelect, byte oe, byte clk, byte reset, byte 
 void 
 GALInterface::configureIOPin(const GALPinDescription& pin, int mode) noexcept {
     if (pin.ioPin()) {
-        switch (auto temporary = ioPinConfiguration_; mode) {
+        switch (auto temporary = getIOPinConfiguration(); mode) {
             case INPUT:
-                /// @todo disable pullups
-                Serial.print(F("temporary: 0b"));
-                Serial.print(temporary, BIN);
-                Serial.print(F(" -> 0b"));
                 temporary |= pin.mask();
-                Serial.println(temporary, BIN);
                 configureIOPins(temporary);
                 break;
             case OUTPUT:
-                Serial.print(F("temporary: 0b"));
-                Serial.print(temporary, BIN);
-                Serial.print(F(" -> 0b"));
                 temporary &= ~(pin.mask());
-                Serial.println(temporary, BIN);
                 configureIOPins(temporary);
                 break;
             default:
@@ -379,7 +355,7 @@ GALInterface::configureIOPin(const GALPinDescription& pin, int mode) noexcept {
 
 bool
 GALInterface::isInputPin(const GALPinDescription& pin) const noexcept {
-    return pin.valid() && (pin.inputOnlyPin() || ((static_cast<uint8_t>(~ioPinConfiguration_) & static_cast<uint8_t>(pin.mask())) == 0));
+    return pin.valid() && (pin.inputOnlyPin() || ((static_cast<uint8_t>(~getIOPinConfiguration()) & static_cast<uint8_t>(pin.mask())) == 0));
 }
 
 uint8_t
@@ -388,66 +364,54 @@ GALInterface::readOutputs() const noexcept {
 }
 void
 GALInterface::configureIOPins(uint8_t pattern) noexcept {
-    ioPinConfiguration_ = pattern;
     // invert the bits since we want inputs _TO_ the GAL being an output and 
     // outputs _FROM_ the gal being inputs to the chip
-    write8(MCP23x17Registers::IODIRA, static_cast<uint8_t>(~ioPinConfiguration_));
-}
-void
-GALInterface::setClockFrequency(int freq) noexcept {
-    clockFrequency_ = freq;
-    if (freq == 0) {
-        digitalWrite(clk_, LOW);
-    } else {
-        analogWrite(clk_, freq);
-    }
+    write8(MCP23x17Registers::IODIRA, static_cast<uint8_t>(~pattern));
 }
 void
 GALInterface::setInput(int k, bool state) noexcept {
     if (auto& pin = GAL16V8[k % 20]; pin.clockPin()) {
-        inputPinState_.bits.clkState = state;
+        digitalWrite(getI1CLKPin(), state ? HIGH : LOW);
     } else if (pin.inputOnlyPin()) {
+        auto readState = read8(MCP23x17Registers::OLATB);
         if (state) {
-            inputPinState_.bits.inputs |= pin.mask();
+            readState |= pin.mask();
         } else {
-            inputPinState_.bits.inputs &= static_cast<uint8_t>(~pin.mask());
+            readState &= static_cast<uint8_t>(~pin.mask());
         }
+        write8(MCP23x17Registers::OLATB, readState);
     } else if (pin.outputEnablePin()) {
-        inputPinState_.bits.oeState = state;
+        digitalWrite(getI9Pin(), state ? HIGH : LOW);
     } else if (pin.ioPin()) {
+        auto readState = read8(MCP23x17Registers::OLATA);
         if (state) {
-            inputPinState_.bits.ioPins |= pin.mask();
+            readState |= pin.mask();
         } else {
-            inputPinState_.bits.ioPins &= static_cast<uint8_t>(~pin.mask());
+            readState &= static_cast<byte>(~pin.mask());
         }
-    }
-    updateInputs();
-}
-void
-GALInterface::updateInputs() noexcept {
-    if (clockPinIsDigitalInput()) {
-        digitalWrite(clk_, inputPinState_.bits.clkState);
-    }
-    digitalWrite(oe_, inputPinState_.bits.oeState);
-    write8(MCP23x17Registers::OLATB, inputPinState_.bits.inputs);
-    write8(MCP23x17Registers::OLATA, inputPinState_.bits.ioPins);
+        write8(MCP23x17Registers::OLATA, readState);
+    } 
 }
 
 void
 GALInterface::setInputs(uint32_t pattern) noexcept {
-    inputPinState_.full = pattern;
-    updateInputs();
+    InputState tmp;
+    tmp.full = pattern;
+    digitalWrite(getI1CLKPin(), tmp.bits.clkState ? HIGH : LOW);
+    digitalWrite(getI9Pin(), tmp.bits.oeState ? HIGH : LOW);
+    write8(MCP23x17Registers::OLATB, tmp.bits.inputs);
+    write8(MCP23x17Registers::OLATA, tmp.bits.ioPins);
 }
 bool
 GALInterface::getInputState(const GALPinDescription& pin) const noexcept {
     if (pin.clockPin()) {
-        return inputPinState_.bits.clkState;
+        return digitalRead(getI1CLKPin()) == HIGH;
     } else if (pin.inputOnlyPin()) {
-        return inputPinState_.bits.inputs & pin.mask();
+        return read8(MCP23x17Registers::OLATB) & pin.mask();
     } else if (pin.outputPin()) {
-        return inputPinState_.bits.ioPins & pin.mask();
+        return read8(MCP23x17Registers::OLATA) & pin.mask();
     } else if (pin.outputEnablePin()) {
-        return inputPinState_.bits.oeState;
+        return digitalRead(getI9Pin()) == HIGH;
     } else {
         return false;
     }
@@ -576,7 +540,7 @@ void
 GALInterface::displayRegisters() const noexcept {
     Serial.println(F("GAL Interface Registers"));
     Serial.print(F("IO Pins Configuration: 0b"));
-    Serial.println(static_cast<byte>(~ioPinConfiguration_), BIN);
+    Serial.println(static_cast<byte>(~getIOPinConfiguration()), BIN);
     Serial.print(F("Input values: 0b"));
     Serial.println(inputPinState_.getMaskedState(), BIN);
     Serial.print(F("Outputs: 0x"));
