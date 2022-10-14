@@ -876,6 +876,26 @@ X(outputPin, "output-pin", [](const String& theStr) noexcept { return pushItemOn
 X(inputLow, "set-low", [](const String& theStr) noexcept { return pushItemOntoStack(LOW, TreatAs<decltype(LOW)>{}) && setInputPinValue(theStr); });
 X(inputHigh, "set-high", [](const String& theStr) noexcept { return pushItemOntoStack(HIGH, TreatAs<decltype(HIGH)> { }) && setInputPinValue(theStr); });
 X(dateTimeNow, "now", [](const String&) noexcept { printRTCDateTime(); return true; });
+X(ioDirection, "io-dir", [](const String&) noexcept {
+        if (expectedNumberOfItemsOnStack(1)) {
+            int32_t value;
+            popItemOffStack(value);
+            iface.configureIOPins(static_cast<uint8_t>(value));
+            return true;
+        } else {
+            return false;
+        }
+    });
+X(assignAllInputs, "all-inputs", [](const String&) noexcept {
+        if (expectedNumberOfItemsOnStack(1)) {
+            int32_t value;
+            popItemOffStack(value);
+            iface.setInputs(value);
+            return true;
+        } else {
+            return false;
+        }
+        });
 Y(Pin_I1,  "P1",  GAL16V8[0].zeroIndex()); 
 Y(Pin_I2,  "P2",  GAL16V8[1].zeroIndex());
 Y(Pin_I3,  "P3",  GAL16V8[2].zeroIndex());
@@ -929,6 +949,9 @@ const PureWord* lookupTable[] = {
     &Pin_IO3,
     &Pin_IO2,
     &Pin_IO1,
+    &ioDirection,
+    &assignAllInputs,
+    &hexParse,
     &binaryParse,
     // must come last
     &fallback,
