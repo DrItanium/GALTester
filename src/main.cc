@@ -39,6 +39,7 @@ constexpr auto I9 = getI9Pin();
 constexpr auto IOEXP_INT = getIOEXPIntPin();
 constexpr auto I1_CLK = getI1CLKPin();
 constexpr auto SDSelect = getSDCardPin();
+constexpr uint32_t MaxSPISpeed = 4 * 1000 * 1000; // 4 MHz to make sure
 
 
 enum class IOExpanderAddress : byte {
@@ -163,7 +164,7 @@ class GALInterface {
          * @return The 16-bit value pulled from the io expander
          */
         uint16_t read16(MCP23x17Registers opcode) const noexcept {
-            SPI.beginTransaction(SPISettings(F_CPU, MSBFIRST, SPI_MODE0));
+            SPI.beginTransaction(SPISettings(MaxSPISpeed, MSBFIRST, SPI_MODE0));
             digitalWrite(cs_, LOW);
             (void)SPI.transfer(readOpcode_);
             (void)SPI.transfer(static_cast<byte>(opcode));
@@ -180,7 +181,7 @@ class GALInterface {
          * @return The contents of an 8-bit register on the io expander
          */
         uint8_t read8(MCP23x17Registers opcode) const noexcept {
-            SPI.beginTransaction(SPISettings(F_CPU, MSBFIRST, SPI_MODE0));
+            SPI.beginTransaction(SPISettings(MaxSPISpeed, MSBFIRST, SPI_MODE0));
             digitalWrite(cs_, LOW);
             (void)SPI.transfer(readOpcode_);
             (void)SPI.transfer(static_cast<byte>(opcode));
@@ -196,7 +197,7 @@ class GALInterface {
          * @param value The 16-bit value to send to the io expander
          */
         void write16(MCP23x17Registers opcode, uint16_t value) noexcept {
-            SPI.beginTransaction(SPISettings(F_CPU, MSBFIRST, SPI_MODE0));
+            SPI.beginTransaction(SPISettings(MaxSPISpeed, MSBFIRST, SPI_MODE0));
             digitalWrite(cs_, LOW);
             (void)SPI.transfer(writeOpcode_);
             (void)SPI.transfer(static_cast<byte>(opcode));
@@ -212,7 +213,7 @@ class GALInterface {
          * @param value The 8-bit value to send to the io expander
          */
         void write8(MCP23x17Registers opcode, uint8_t value) noexcept {
-            SPI.beginTransaction(SPISettings(F_CPU, MSBFIRST, SPI_MODE0));
+            SPI.beginTransaction(SPISettings(MaxSPISpeed, MSBFIRST, SPI_MODE0));
             digitalWrite(cs_, LOW);
             (void)SPI.transfer(writeOpcode_);
             (void)SPI.transfer(static_cast<byte>(opcode));
